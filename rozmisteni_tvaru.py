@@ -4,6 +4,36 @@ import arcpy
 arcpy.env.workspace = "C:\\Users\\danie\\OneDrive\\Dokumenty\\ArcGIS\\Projects\\Diplomka\\Diplomka.gdb"
 arcpy.env.overwriteOutput = 1
 
+def TvarFeatureClass (featureClass):
+    """
+
+    :param featureClas:
+    :return: Tvar ve formě seznamu
+    """
+    # vytvorime kurzor
+    seaCur = arcpy.da.SearchCursor(featureClass, ["OBJECTID", "SHAPE@"])
+
+    # pro kazdy zaznam v souboru ke zpracovani
+    for row in seaCur:
+        geom = row[1]
+        part = geom.getPart(0)
+        pnt = part.next()
+        tvar = []
+        while pnt:
+            tvar.append([pnt.X, pnt.Y])
+            # a ber dalsi
+            pnt = part.next()
+            # ošetření polygonu s dírou
+            if not pnt:
+                pnt = part.next()
+                if pnt:
+                    print("Dira v polygonu:")
+
+    # smazeme kurzor (uvolnime zamek)
+    print(tvar)
+    del seaCur
+    return tvar
+
 def UmisteniTvaru(tvar,souradnice,epsg,output):
     """
     Funkce zadaná tvary rozmístí jako jednotlivé polygony na zadané souřadnice
@@ -47,9 +77,8 @@ def UmisteniTvaru(tvar,souradnice,epsg,output):
 
 output = "tvar_pokus"
 epsg = 32633
-tvar = [[-0.6749999998137355, 22.27500000037253], [0.6749999998137355, 22.27500000037253], [0.6749999998137355, 15.525000000372529], [7.4249999998137355, 15.525000000372529], [7.4249999998137355, 14.175000000745058], [0.6749999998137355, 14.175000000745058], [0.6749999998137355, 0.6750000007450581], [5.400000000372529, 0.6750000007450581], [5.400000000372529, -0.6750000007450581], [-0.6749999998137355, -0.6750000007450581], [-0.6749999998137355, 14.175000000745058], [-7.4249999998137355, 14.175000000745058], [-7.4249999998137355, 15.525000000372529], [-0.6749999998137355, 15.525000000372529], [-0.6749999998137355, 22.27500000037253]]
-
-
+tvar = TvarFeatureClass("kriz_null_DetectGraphicConfl1")
+souradnice = "kriz_vyber_Project"
 
 UmisteniTvaru(tvar,0,epsg,output)
 
