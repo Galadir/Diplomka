@@ -49,29 +49,30 @@ def UmisteniTvaru(tvar,souradnice,epsg,output):
     if not arcpy.Exists(output):
         arcpy.Delete_management(output)
     arcpy.CreateFeatureclass_management(arcpy.env.workspace, output, "POLYGON", "#", "#", "#", sr)
-    arcpy.AddField_management(output,"VALUE","SHORT")
+    arcpy.AddField_management(output,"SOURADNICE","TEXT")
+
 
     #InsertCursor, kterým budu vkládat výsledné tvary
-    insCur = arcpy.da.InsertCursor(output,["SHAPE@","VALUE"])
+    insCur = arcpy.da.InsertCursor(output,["SHAPE@","SOURADNICE"])
+    #SearchCursor na procházení souřadnic bodů
+    seaCur = arcpy.da.SearchCursor(souradnice, ["SHAPE@"])
 
-    # vytvoření pole, do kterého nahraji souřadnice
-    part = arcpy.Array()
-    #proměnná, do které budu ukládat jednotlívé tvary
-    features = []
+    for row in seaCur:
+        #zjisteni souradnic bodu
+        geom = row[0]
+        pnt1 = geom.getPart(0)
 
-    #nahrání tvaru do pole
-    for i in tvar:
-        pnt = arcpy.Point(i[0],i[1])
-        part.add(pnt)
-
-    #vytvoření polygonu z pole
-    polygon = arcpy.Polygon(part)
-    #vyčištění pole
-    #part.removeAll()
-    #features.append(polygon)
-
-    print(polygon)
-    insCur.insertRow((polygon,1))
+        #pole do kterého nahraji tvar
+        part = arcpy.Array()
+        #nahrání tvaru s posunem do pole
+        for nod in tvar:
+            pnt2 = arcpy.Point(nod[0]+pnt1.X,nod[1]+pnt1.Y)
+            part.add(pnt2)
+        #vytvoření polygonu z pole
+        polygon = arcpy.Polygon(part)
+        #vyčištění pole
+        part.removeAll()
+        insCur.insertRow((polygon,str(pnt1.X)+", "+str(pnt1.Y)))
     del insCur
 
 
@@ -80,7 +81,7 @@ epsg = 32633
 tvar = TvarFeatureClass("kriz_null_DetectGraphicConfl1")
 souradnice = "kriz_vyber_Project"
 
-UmisteniTvaru(tvar,0,epsg,output)
+UmisteniTvaru(tvar,souradnice,epsg,output)
 
 
 
