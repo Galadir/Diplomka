@@ -4,11 +4,19 @@ import arcpy
 arcpy.env.workspace = "C:\\Users\\danie\\OneDrive\\Dokumenty\\ArcGIS\\Projects\\Diplomka\\Diplomka.gdb"
 arcpy.env.overwriteOutput = 1
 
-sr = arcpy.SpatialReference(32633) # EPSG kod
-if not arcpy.Exists("tvar_pokus"):
-    arcpy.Delete_management("tvar_pokus")
-arcpy.CreateFeatureclass_management(arcpy.env.workspace, "tvar_pokus", "POLYGON", "#", "#", "#", sr)
-arcpy.AddField_management("tvar_pokus","VALUE","SHORT")
+def UmisteniTvaru(tvar,souradnice,epsg,output):"""
+Funkce zadaná tvary rozmístí jako jednotlivé polygony na zadané souřadnice
+    :param tvar: Tvar definovaný souřadnicemi v seznamu
+    :param souradnice: Souřadnice bodů
+    :param epsg: Souřadnicový systém definovaný EPSG
+    :param output: Feature Layer, do které se polygony zapíšou
+    :return: 
+    """
+    sr = arcpy.SpatialReference(epsg) # EPSG kod
+    if not arcpy.Exists(output):
+        arcpy.Delete_management(output)
+    arcpy.CreateFeatureclass_management(arcpy.env.workspace, output, "POLYGON", "#", "#", "#", sr)
+    arcpy.AddField_management(output,"VALUE","SHORT")
 
 output = "tvar_pokus"
 
