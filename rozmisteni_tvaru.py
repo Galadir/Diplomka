@@ -10,7 +10,7 @@ def UmisteniTvaru(tvar,souradnice,epsg,output):
     :param tvar: Tvar definovaný souřadnicemi v seznamu
     :param souradnice: Souřadnice bodů
     :param epsg: Souřadnicový systém definovaný EPSG
-    :param output: Feature Layer, do které se polygony zapíšou
+    :param output: Feature Class, do které se polygony zapíšou
     :return: 
     """
 
@@ -47,13 +47,8 @@ def UmisteniTvaru(tvar,souradnice,epsg,output):
 
 output = "tvar_pokus"
 epsg = 32633
-tvar = [
-    [0,20],
-    [0,0],
-    [30,0],
-    [30,30],
-    [0,20]
-]
+tvar = [[-0.6749999998137355, 22.27500000037253], [0.6749999998137355, 22.27500000037253], [0.6749999998137355, 15.525000000372529], [7.4249999998137355, 15.525000000372529], [7.4249999998137355, 14.175000000745058], [0.6749999998137355, 14.175000000745058], [0.6749999998137355, 0.6750000007450581], [5.400000000372529, 0.6750000007450581], [5.400000000372529, -0.6750000007450581], [-0.6749999998137355, -0.6750000007450581], [-0.6749999998137355, 14.175000000745058], [-7.4249999998137355, 14.175000000745058], [-7.4249999998137355, 15.525000000372529], [-0.6749999998137355, 15.525000000372529], [-0.6749999998137355, 22.27500000037253]]
+
 
 
 UmisteniTvaru(tvar,0,epsg,output)
