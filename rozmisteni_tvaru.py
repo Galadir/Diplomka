@@ -21,8 +21,8 @@ def TvarFeatureClass (featureClass):
         tvar = []
         while pnt:
             tvar.append([pnt.X, pnt.Y])
-            # a ber dalsi
             pnt = part.next()
+
             # ošetření polygonu s dírou
             if not pnt:
                 pnt = part.next()
