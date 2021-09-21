@@ -1,5 +1,7 @@
 import arcpy
 
+
+
 #definovani pracovního prostoru
 arcpy.env.workspace = "C:\\Users\\danie\\OneDrive\\Dokumenty\\ArcGIS\\Projects\\Diplomka\\Diplomka.gdb"
 arcpy.env.overwriteOutput = 1
