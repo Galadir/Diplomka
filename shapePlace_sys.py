@@ -3,19 +3,19 @@ import os
 import sys
 
 # osetreni zadani chybneho poctu vstupu
-if len(sys.argv) != 4:
+if len(sys.argv) != 5:
     print('Chybny pocet argumentu')
     exit(-1)
 
-# definovani vstupnich argumentu a osetreni jejich chybneho zadani
+# definovani vstupnich argumentu z prikazové radky
 try:
     inputDatabase = os.path.abspath(sys.argv[1])
     inputShape = sys.argv[2]
     inputCoords = sys.argv[3]
+    output = sys.argv[4]
 except ValueError:
     print('Chybne zadani nektereho z argumentu')
     exit(-2)
-
 
 # definovani pracovního prostoru
 arcpy.env.workspace = inputDatabase
@@ -24,14 +24,13 @@ arcpy.env.overwriteOutput = 1
 
 def shapeToList(featureClass):
     """
-
-    :param featureClass:
+    :param featureClass: umístění souboru obsahujícícho polygon určující značku na nulových souřadnicích
     :return: Tvar ve formě seznamu
     """
-    # vytvorime kurzor
+    # tvorba kurzoru
     seaCur = arcpy.da.SearchCursor(featureClass, ["OBJECTID", "SHAPE@"])
 
-    # pro kazdy zaznam v souboru ke zpracovani
+    #
     for row in seaCur:
         geom = row[1]
         part = geom.getPart(0)
@@ -94,9 +93,9 @@ def shapePlace(tvar, souradnice, output):
     del insCur
 
 
-output1 = "shapesInPlaces"
+#output1 = "shapesInPlaces"
 # epsg = 32633
 shape1 = shapeToList(inputShape)
 # souradnice = "kriz_vyber_Project"
 
-shapePlace(shape1, inputCoords, output1)
+shapePlace(shape1, inputCoords, output)
