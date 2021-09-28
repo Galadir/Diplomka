@@ -30,7 +30,7 @@ def shapeToList(featureClass):
     # tvorba kurzoru
     seaCur = arcpy.da.SearchCursor(featureClass, ["OBJECTID", "SHAPE@"])
 
-    #
+    #uložení jednoho záznamu do seznamu shape
     for row in seaCur:
         geom = row[1]
         part = geom.getPart(0)
@@ -46,23 +46,22 @@ def shapeToList(featureClass):
                 if pnt:
                     print("Dira v polygonu:")
 
-    # smazeme kurzor (uvolnime zámek)
     del seaCur
     return shape
 
 
-def shapePlace(tvar, souradnice, output):
+def shapePlace(shape, coords, output):
     """
     Funkce zadaná tvary rozmístí jako jednotlivé polygony na zadané souřadnice
-    :param tvar: Tvar definovaný souřadnicemi v seznamu
-    :param souradnice: Souřadnice bodů
+    :param shape: Tvar definovaný souřadnicemi v seznamu
+    :param coords: Souřadnice bodů
     :param output: Feature Class, do které se polygony zapíšou
     :return: 
     """
 
     # definování outputu
     # sr = arcpy.SpatialReference(epsg) # EPSG kod
-    sr = arcpy.Describe(souradnice).spatialReference
+    sr = arcpy.Describe(coords).spatialReference
 
     if not arcpy.Exists(output):
         arcpy.Delete_management(output)
@@ -72,7 +71,7 @@ def shapePlace(tvar, souradnice, output):
     # InsertCursor, kterým budu vkládat výsledné tvary
     insCur = arcpy.da.InsertCursor(output, ["SHAPE@", "SOURADNICE"])
     # SearchCursor na procházení souřadnic bodů
-    seaCur = arcpy.da.SearchCursor(souradnice, ["SHAPE@"])
+    seaCur = arcpy.da.SearchCursor(coords, ["SHAPE@"])
 
     for row in seaCur:
         # zjisteni souradnic bodu
@@ -82,7 +81,7 @@ def shapePlace(tvar, souradnice, output):
         # pole do kterého nahraji tvar
         part = arcpy.Array()
         # nahrání tvaru s posunem do pole
-        for nod in tvar:
+        for nod in shape:
             pnt2 = arcpy.Point(nod[0]+pnt1.X, nod[1]+pnt1.Y)
             part.add(pnt2)
         # vytvoření polygonu z pole
@@ -93,9 +92,5 @@ def shapePlace(tvar, souradnice, output):
     del insCur
 
 
-#output1 = "shapesInPlaces"
-# epsg = 32633
 shape1 = shapeToList(inputShape)
-# souradnice = "kriz_vyber_Project"
-
 shapePlace(shape1, inputCoords, output)
