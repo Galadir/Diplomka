@@ -1,0 +1,7 @@
+{
+  "symbols": [
+    {"name": "KRIZ_SLOUP_KULTUR_VYZNAMU", "definition": [[0.0,0.0],[0.0,4.0],[4.0,4.0],[4.0,0.0],[0.0,0.0]]},
+    {"name": "MOHYLA_POMNIK_NAHROBEK", "definition": [[2.0,0.0],[0.0,2.0],[2.0,4.0],[4.0,2.0],[0.0,0.0]]},
+    {"name": "VEZOVITA_STAVBA_NASTAVBA", "definition": [[-2.0,0.0],[0.0,3.0],[2.0,0.0],[-2.0,0.0]]}
+  ]
+}
