@@ -34,9 +34,9 @@ def shapeDefinition(shapeInput,scale,epsg):
     """
 
     :param shapeInput: definice tvaru znaku
-    :param scale:
-    :param epsg:
-    :return:
+    :param scale: meritkove cislo
+    :param epsg: definice souradnicoveho systemu
+    :return: seznam souradnic hranic prvku v bode 0
     """
     shapeOutput = []
     if epsg in [32633,5514]:
@@ -54,11 +54,11 @@ def shapeDefinition(shapeInput,scale,epsg):
 def shapePlace(symbolsJSON, inputDataset, outputDataset, epsg, scale):
     """
 
-    :param symbolsJSON:
-    :param inputDataset:
-    :param outputDataset:
-    :param epsg:
-    :param scale:
+    :param symbolsJSON: cesta k souboru s definici znaku v mm
+    :param inputDataset: feature dataset bodovych vrstev
+    :param outputDataset: jmeno datasetu s polygonovymi vrstvami
+    :param epsg: souradnicovy system
+    :param scale: meritkove cislo
     :return:
     """
 
@@ -111,6 +111,12 @@ def shapePlace(symbolsJSON, inputDataset, outputDataset, epsg, scale):
         del insCur
 
 def conflictDetection(newDataset,outputConflict):
+    """
+
+    :param newDataset: dataset s polygonovymi vrstvami
+    :param outputConflict: jmeno feature class s ulozenymi konflikty
+    :return:
+    """
     feaclass = arcpy.ListFeatureClasses("*", "Polygon", newDataset)
 
     if not arcpy.Exists(outputConflict):
