@@ -2,7 +2,7 @@ import arcpy
 import json
 import os
 
-## definovani vstupu pres prikazovy radek
+## definovani vstupu pres prikazovy radek (NEAKTUALNI)
 # import sys
 #
 # # osetreni zadani chybneho poctu vstupu
@@ -20,21 +20,26 @@ import os
 #     print('Chybne zadani nektereho z argumentu')
 #     exit(-2)
 
-# definovani vstupu ve skriptu
+# definovani vstupu ve skriptu (NEAKTUALNI)
 inputDatabase = "C:\\Users\\danie\\OneDrive\\Dokumenty\\ArcGIS\\Projects\\Diplomka\\Diplomka.gdb"
-inputShape = "ctverec_null_polygon"
-inputCoords = "kriz_vyber_5514"
-output = "shapesInPlacesSquere5514"
+# inputShape = "ctverec_null_polygon"
+# inputCoords = "kriz_vyber_5514"
+# output = "shapesInPlacesSquere5514"
 
 # definovani pracovního prostoru
 arcpy.env.workspace = inputDatabase
 arcpy.env.overwriteOutput = 1
 
-inputShape_local = [[0.0,0.0],[0.0,4.0],[4.0,4.0],[4.0,0.0],[0.0,0.0]]
-
 def shapeDefinition(shapeInput,scale,epsg):
+    """
+
+    :param shapeInput: definice tvaru znaku
+    :param scale:
+    :param epsg:
+    :return:
+    """
     shapeOutput = []
-    if epsg in ["32633","5514"]:
+    if epsg in [32633,5514]:
         for point in shapeInput:
             coord = []
             for num in point:
@@ -46,42 +51,15 @@ def shapeDefinition(shapeInput,scale,epsg):
     print(shapeOutput)
     return shapeOutput
 
-def shapeToList(featureClass):
+def shapePlace(symbolsJSON, inputDataset, outputDataset, epsg, scale):
     """
-    :param featureClass: umístění souboru obsahujícícho polygon určující značku na nulových souřadnicích
-    :return: Tvar ve formě seznamu
-    """
-    # tvorba kurzoru
-    seaCur = arcpy.da.SearchCursor(featureClass, ["OBJECTID", "SHAPE@"])
 
-    #uložení jednoho záznamu do seznamu shape
-    for row in seaCur:
-        geom = row[1]
-        part = geom.getPart(0)
-        pnt = part.next()
-        shape = []
-        while pnt:
-            shape.append([pnt.X, pnt.Y])
-            pnt = part.next()
-
-            # ošetření polygonu s dírou
-            if not pnt:
-                pnt = part.next()
-                if pnt:
-                    print("Dira v polygonu:")
-
-    del seaCur
-    print(shape)
-    return shape
-
-
-def shapePlace(symbolsJSON, inputDataset, outputDataset, epsg):
-    """
-    Funkce zadaná tvary rozmístí jako jednotlivé polygony na zadané souřadnice
-    :param shape: Tvar definovaný souřadnicemi v seznamu
-    :param coords: Souřadnice bodů
-    :param output: Feature Class, do které se polygony zapíšou
-    :return: 
+    :param symbolsJSON:
+    :param inputDataset:
+    :param outputDataset:
+    :param epsg:
+    :param scale:
+    :return:
     """
 
     # definování souradnicoveho systemu
@@ -101,38 +79,63 @@ def shapePlace(symbolsJSON, inputDataset, outputDataset, epsg):
 
     for symbol in symbols:
         print("zpracovavam " + symbol["name"])
+        arcpy.CreateFeatureclass_management(outputDataset, symbol["name"]+"2", "POLYGON", "#", "#", "#", sr)
 
-    arcpy.AddField_management(output, "SOURADNICE", "TEXT")
+        output = outputDataset + "/" + symbol["name"]+"2"
+        coords = inputDataset + "/" + symbol["name"]
+        shape = shapeDefinition(symbol["definition"],scale,epsg)
 
-    # InsertCursor, kterým budu vkládat výsledné tvary
-    insCur = arcpy.da.InsertCursor(output, ["SHAPE@", "SOURADNICE"])
-    # SearchCursor na procházení souřadnic bodů
-    seaCur = arcpy.da.SearchCursor(coords, ["SHAPE@"])
+        arcpy.AddField_management(output, "SOURADNICE", "TEXT")
 
-    for row in seaCur:
-        # zjisteni souradnic bodu
-        geom = row[0]
-        pnt1 = geom.getPart(0)
+        # InsertCursor, kterým budu vkládat výsledné tvary
+        insCur = arcpy.da.InsertCursor(output, ["SHAPE@", "SOURADNICE"])
+        # SearchCursor na procházení souřadnic bodů
+        seaCur = arcpy.da.SearchCursor(coords, ["SHAPE@"])
 
-        # pole do kterého nahraji tvar
-        part = arcpy.Array()
-        # nahrání tvaru s posunem do pole
-        for nod in shape:
-            pnt2 = arcpy.Point(nod[0]+pnt1.X, nod[1]+pnt1.Y)
-            part.add(pnt2)
-        # vytvoření polygonu z pole
-        polygon = arcpy.Polygon(part)
-        # vyčištění pole
-        part.removeAll()
-        insCur.insertRow((polygon, str(pnt1.X)+", "+str(pnt1.Y)))
-    del insCur
+        for row in seaCur:
+            # zjisteni souradnic bodu
+            geom = row[0]
+            pnt1 = geom.getPart(0)
+
+            # pole do kterého nahraji tvar
+            part = arcpy.Array()
+            # nahrání tvaru s posunem do pole
+            for nod in shape:
+                pnt2 = arcpy.Point(nod[0]+pnt1.X, nod[1]+pnt1.Y)
+                part.add(pnt2)
+            # vytvoření polygonu z pole
+            polygon = arcpy.Polygon(part)
+            # vyčištění pole
+            part.removeAll()
+            insCur.insertRow((polygon, str(pnt1.X)+", "+str(pnt1.Y)))
+        del insCur
+
+def conflictDetection(newDataset,outputConflict):
+    feaclass = arcpy.ListFeatureClasses("*", "Polygon", newDataset)
+
+    if not arcpy.Exists(outputConflict):
+        arcpy.Delete_management(outputConflict)
+    arcpy.CreateFeatureclass_management(arcpy.env.workspace, outputConflict, "POLYGON")
+
+    for fc in feaclass:
+        print("A: "+fc)
+        for fc2 in feaclass:
+            print("B: " + fc2)
+            if fc2 == fc:
+                arcpy.intelligence.FindOverlaps(fc, "outFcTemp", "outCentroidTemp")
+                arcpy.management.Merge(["outFcTemp", outputConflict], "outputMergeTemp")
+                arcpy.management.CopyFeatures("outputMergeTemp", outputConflict)
+            else:
+                arcpy.analysis.Intersect([fc,fc2], "outFcTemp")
+                arcpy.management.Merge(["outFcTemp",outputConflict], "outputMergeTemp")
+                arcpy.management.CopyFeatures("outputMergeTemp", outputConflict)
+
+    arcpy.management.Delete(["outFcTemp","outputMergeTemp","outCentroidTemp"])
 
 
-#shape1 = shapeToList(inputShape)
+
 #shape2 = shapeDefinition(inputShape_local,10000,"5514")
-# shapePlace(shape2, inputCoords, output)
+#shapePlace("znacky.json","JTSK","NOVY",5514,10000)
+#conflictDetection("NOVY","CONFLICTpOKUS1")
 
-feaclass = arcpy.ListFeatureClasses("*", "Point","JTSK")
 
-for fc in feaclass:
-    print(fc)
