@@ -159,27 +159,25 @@ def clusterDefinition(inputFeature,inputBuffer):
     outputDict = {}
     for row in seaCur:
         if controlShape == row[1]:
-            id1=row[0]
+            id=row[0]
+            if id not in outputDict:
+                outputDict[id]=clusterNum
+            else:
+                x = outputDict[id]
+                for kay,value in outputDict.items():
+                    if value == x:
+                        outputDict[kay] = clusterNum
         else:
-            id2=row[0]
-            if id1 not in outputDict:
-                outputDict[id1]=clusterNum
-            else:
-                x = outputDict[id1]
-                for kay,value in outputDict.items():
-                    if value == x:
-                        outputDict[kay] = clusterNum
-
-            if id2 not in outputDict:
-                outputDict[id1]=clusterNum
-            else:
-                x = outputDict[id2]
-                for kay,value in outputDict.items():
-                    if value == x:
-                        outputDict[kay] = clusterNum
-
+            controlShape = row[1]
             clusterNum += 1
-        control += 1
+            id = row[0]
+            if id not in outputDict:
+                outputDict[id] = clusterNum
+            else:
+                x = outputDict[id]
+                for kay, value in outputDict.items():
+                    if value == x:
+                        outputDict[kay] = clusterNum
 
     print(outputDict)
     with arcpy.da.UpdateCursor(inputFeature, ['OBJECTID', 'CLUSTER']) as upCurs:
