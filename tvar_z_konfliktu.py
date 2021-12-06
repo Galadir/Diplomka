@@ -4,7 +4,7 @@ import arcpy
 arcpy.env.workspace = "C:\\Users\\danie\\OneDrive\\Dokumenty\\ArcGIS\\Projects\\Diplomka\\Diplomka.gdb"
 
 # soubor ke zpracovani
-tvarFeatureClass = "kriz_null_DetectGraphicConfl1"
+tvarFeatureClass = "Tkriz_null_DetectGraphicConfl"
 
 # vytvorime kurzor
 seaCur = arcpy.da.SearchCursor(tvarFeatureClass, ["OBJECTID", "SHAPE@"])
@@ -21,7 +21,7 @@ for row in seaCur:
         # tento cyklus probehne pro kazdy bod dane casti
         # vypis souradnice bodu
         print(pnt.X, pnt.Y)
-        tvar.append([pnt.X,pnt.Y])
+        tvar.append([pnt.X/10,pnt.Y/10])
 
         # a ber dalsi
         pnt = part.next()
