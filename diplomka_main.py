@@ -1,5 +1,6 @@
 import arcpy
 import json
+import time
 import os
 
 ## definovani vstupu pres prikazovy radek (NEAKTUALNI)
@@ -55,13 +56,19 @@ def shapeDefinition(shapeInput,scale,epsg):
 
 def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, scale):
     """
+    Vytváří polygonovou vrstvu, kde jsou místo bodů z vybranych trid
+    v datasetu ZABAGED vytvoreny polygony odpovídající kartografickému
+    znaku pro danou třídu v zadaném měřítku a souřadnicovém systému.
 
-    :param symbolsJSON: cesta k souboru s definici znaku v mm
-    :param inputDataset: feature dataset bodovych vrstev
-    :param outputFeature: jmeno datasetu s polygonovymi vrstvami
-    :param outputBuffer: jméno souboru s bufferem definujícím maximální posun
-    :param epsg: souradnicovy system
-    :param scale: meritkove cislo
+    Krome toho vytvari polygonovou vrstvu, která kolem zmíněných polygonů
+    utvoří obalovou zonu podle maximálního povoleného posunu znaku.
+
+    :param symbolsJSON: cesta k souboru s definici znakoveho klice
+    :param inputDataset: cesta k datasetu vstupnich bodovych vrstev – nazvy trid musi byt shodne
+    :param outputFeature: cesta k výslednému souboru s polygony
+    :param outputBuffer: cesta k výslednému souboru s obalovými zónami podle maximálního povoleného posunu znaku
+    :param epsg: souradnicovy system zadany EPSG kodem
+    :param scale: meritkove cislo, pro ktere maji byt vypocitany velikosti polygonu
     :return:
     """
 
@@ -69,28 +76,33 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
     sr = arcpy.SpatialReference(epsg) # EPSG kod
     # sr = arcpy.Describe(inputDataset).spatialReference
 
-    # vytvoreni datasetu k ukladani
+    # vytvoreni datasetu k ukladani polygonů
     if not arcpy.Exists(outputFeature):
         arcpy.Delete_management(outputFeature)
 
     arcpy.CreateFeatureclass_management(arcpy.env.workspace, outputFeature, "POLYGON", "#", "#", "#", sr)
 
-    arcpy.AddField_management(outputFeature, "SOURADNICE", "TEXT")
-    arcpy.AddField_management(outputFeature, "KATEGORIE", "TEXT")
+    # přidání odpovídajících polí atributové tabulky
+    arcpy.AddField_management(outputFeature, "COORDS", "TEXT")
+    arcpy.AddField_management(outputFeature, "CLASS", "TEXT")
     arcpy.AddField_management(outputFeature, "SHIFT", "TEXT")
     arcpy.AddField_management(outputFeature, "CLUSTER", "SHORT")
 
 
-    insCur = arcpy.da.InsertCursor(outputFeature,["SHAPE@", "SOURADNICE","KATEGORIE","SHIFT","CLUSTER"])
+    insCur = arcpy.da.InsertCursor(outputFeature,["SHAPE@", "COORDS","CLASS","SHIFT","CLUSTER"])
 
     # prochazeni definovanych znacek
     with open(symbolsJSON, encoding='UTF-8') as f:
-        symbolsLoad = json.load(f)
+        jsonLoad = json.load(f)
 
-    symbols = symbolsLoad['symbols']
+    symbols = jsonLoad['symbols']
+
+    # list všech zpracovaných tříd pro kontrolu při výstupu
+    controlOutput = []
 
     for symbol in symbols:
         print("zpracovavam " + symbol["name"])
+        controlOutput.append(symbol["name"])
 
         coords = inputDataset + "/" + symbol["name"]
         shape = shapeDefinition(symbol["definition"],scale,epsg)
@@ -117,7 +129,13 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
 
     del insCur
 
-    # vytvoreni bufferu resici mozne posuny
+    # vypsání tříd z datasetu, které nebyly zpracovány
+    controlInput = arcpy.ListFeatureClasses("","All",inputDataset)
+    control = list(set(controlInput) - set(controlOutput))
+    print("Nezpracované třídy: {}".format(control))
+    print("Z celkových {} tříd nebylo zpracováno {}.".format(len(controlInput),len(control)))
+
+    # vytvoreni souboru s obalovými zónami
     arcpy.analysis.Buffer(outputFeature, outputBuffer, "SHIFT")
 
 
@@ -150,6 +168,8 @@ def conflictDetection(newDataset,outputConflict):
     arcpy.management.Delete(["outFcTemp","outputMergeTemp","outCentroidTemp"])
 
 def clusterDefinition(inputFeature,inputBuffer):
+    seconds1 = time.time()
+
     arcpy.analysis.Intersect(inputBuffer, "intersectFeatureClass")
 
 
@@ -188,6 +208,19 @@ def clusterDefinition(inputFeature,inputBuffer):
             upCurs.updateRow(row)
 
     del seaCur
+    seconds2 = time.time()
+    print(seconds2 - seconds1)
+
+def clusterDefinition2(inputFeature,inputBuffer,outputFeature ):
+    seconds1 = time.time()
+
+    arcpy.management.Dissolve(inputBuffer, "cluster")
+
+    arcpy.analysis.Identity(inputFeature, "cluster", outputFeature, "ONLY_FID")
+    arcpy.DeleteFeatures_management("cluster")
+    seconds2 = time.time()
+    print(seconds2 - seconds1)
+
 
 def nullCluster(inputFeature):
     with arcpy.da.UpdateCursor(inputFeature, ['OBJECTID', 'CLUSTER']) as upCurs:
@@ -196,9 +229,11 @@ def nullCluster(inputFeature):
             upCurs.updateRow(row)
 
 #shape2 = shapeDefinition(inputShape_local,10000,"5514")
-#shapePlace("znacky.json","JTSK","shapePlace_comb","shapePlace_buff",5514,10000)
-clusterDefinition("shapePlace_comb","shapePlace_buff")
-#nullCluster("shapePlace_comb")
+#shapePlace("znacky.json","JTSK","T4shapePlace_comb","T4shapePlace_buff",5514,10000)
+nullCluster("T4shapePlace_comb")
+clusterDefinition("T4shapePlace_comb","T4shapePlace_buff")
+clusterDefinition2("T4shapePlace_comb","T4shapePlace_buff","T4shapePlace_clust2")
+
 #conflictDetection("NOVY","CONFLICTpOKUS1")
 
 
