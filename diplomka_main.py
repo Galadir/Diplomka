@@ -83,13 +83,14 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
     arcpy.CreateFeatureclass_management(arcpy.env.workspace, outputFeature, "POLYGON", "#", "#", "#", sr)
 
     # přidání odpovídajících polí atributové tabulky
-    arcpy.AddField_management(outputFeature, "COORDS", "TEXT")
+    arcpy.AddField_management(outputFeature, "X1", "DOUBLE")
+    arcpy.AddField_management(outputFeature, "Y1", "DOUBLE")
     arcpy.AddField_management(outputFeature, "CLASS", "TEXT")
     arcpy.AddField_management(outputFeature, "SHIFT", "TEXT")
     arcpy.AddField_management(outputFeature, "CLUSTER", "SHORT")
 
 
-    insCur = arcpy.da.InsertCursor(outputFeature,["SHAPE@", "COORDS","CLASS","SHIFT","CLUSTER"])
+    insCur = arcpy.da.InsertCursor(outputFeature,["SHAPE@", "X1", "Y1", "CLASS","SHIFT","CLUSTER"])
 
     # prochazeni definovanych znacek
     with open(symbolsJSON, encoding='UTF-8') as f:
@@ -102,14 +103,21 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
 
     for symbol in symbols:
         print("zpracovavam " + symbol["name"])
-        controlOutput.append(symbol["name"])
 
         coords = inputDataset + "/" + symbol["name"]
         shape = shapeDefinition(symbol["definition"],scale,epsg)
 
-        # SearchCursor na procházení souřadnic bodů
-        seaCur = arcpy.da.SearchCursor(coords, ["SHAPE@"])
+        # výjimka pro případ chybného definování názvu znaku
+        try:
+            seaCur = arcpy.da.SearchCursor(coords, ["SHAPE@"])
+        except RuntimeError:
+            print("\nNEZPRACOVÁNO '" + coords + "': soubor s tímto názvem pravděpodobně neexistuje \n \n")
+            continue
 
+        # přidání symbolu do seznamu zpracovaných tříd pro kontrolu výstupu
+        controlOutput.append(symbol["name"])
+
+        # SearchCursor na procházení souřadnic bodů
         for row in seaCur:
             # zjisteni souradnic bodu
             geom = row[0]
@@ -125,7 +133,7 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
             polygon = arcpy.Polygon(part)
             # vyčištění pole
             part.removeAll()
-            insCur.insertRow((polygon, str(pnt1.X)+", "+str(pnt1.Y),symbol["name"],symbol["allowedShift"],0))
+            insCur.insertRow((polygon, pnt1.X,pnt1.Y,symbol["name"],symbol["allowedShift"],0))
 
     del insCur
 
@@ -133,7 +141,7 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
     controlInput = arcpy.ListFeatureClasses("","All",inputDataset)
     control = list(set(controlInput) - set(controlOutput))
     print("Nezpracované třídy: {}".format(control))
-    print("Z celkových {} tříd nebylo zpracováno {}.".format(len(controlInput),len(control)))
+    print("Z celkových {} tříd bylo {} zpracováno a {} nezpracováno.".format(len(controlInput),len(controlOutput), len(control)))
 
     # vytvoreni souboru s obalovými zónami
     arcpy.analysis.Buffer(outputFeature, outputBuffer, "SHIFT")
@@ -217,10 +225,60 @@ def clusterDefinition2(inputFeature,inputBuffer,outputFeature ):
     arcpy.management.Dissolve(inputBuffer, "cluster")
 
     arcpy.analysis.Identity(inputFeature, "cluster", outputFeature, "ONLY_FID")
-    arcpy.DeleteFeatures_management("cluster")
+    arcpy.management.Delete("cluster")
     seconds2 = time.time()
     print(seconds2 - seconds1)
 
+def clusterDefinition3(inputFeature,inputBuffer):
+    seconds1 = time.time()
+
+    #arcpy.analysis.Intersect(inputBuffer, "intersectFeatureClass")
+    arcpy.intelligence.FindOverlaps(inputBuffer, "outOverlapTemp", "outCentroidTemp")
+    arcpy.analysis.SpatialJoin(inputBuffer, "outOverlapTemp", "outSpatialTemp", "JOIN_ONE_TO_MANY", "KEEP_COMMON",
+                               "#", "CONTAINS", 0)
+
+    arcpy.management.Sort("outSpatialTemp", "outSortTemp", [["JOIN_FID", "ASCENDING"]])
+
+
+    seaCur = arcpy.da.SearchCursor("outSortTemp",["ORIG_FID","JOIN_FID"])
+    controlShape = 1
+    clusterNum = 1
+    outputDict = {}
+    for row in seaCur:
+        if controlShape == row[1]:
+            id=row[0]
+            if id not in outputDict:
+                outputDict[id]=clusterNum
+            else:
+                x = outputDict[id]
+                for kay,value in outputDict.items():
+                    if value == x:
+                        outputDict[kay] = clusterNum
+        else:
+            controlShape = row[1]
+            clusterNum += 1
+            id = row[0]
+            if id not in outputDict:
+                outputDict[id] = clusterNum
+            else:
+                x = outputDict[id]
+                for kay, value in outputDict.items():
+                    if value == x:
+                        outputDict[kay] = clusterNum
+
+    print(outputDict)
+    with arcpy.da.UpdateCursor(inputFeature, ['OBJECTID', 'CLUSTER']) as upCurs:
+        for row in upCurs:
+            #row[1] = 2
+            try: row[1] = outputDict[row[0]]
+            except KeyError: continue
+            upCurs.updateRow(row)
+
+    del seaCur
+    arcpy.management.Delete("'outSpatialTemp';'outSortTemp';'outOverlapTemp';'outCentroidTemp'")
+
+    seconds2 = time.time()
+    print(seconds2 - seconds1)
 
 def nullCluster(inputFeature):
     with arcpy.da.UpdateCursor(inputFeature, ['OBJECTID', 'CLUSTER']) as upCurs:
@@ -229,10 +287,10 @@ def nullCluster(inputFeature):
             upCurs.updateRow(row)
 
 #shape2 = shapeDefinition(inputShape_local,10000,"5514")
-#shapePlace("znacky.json","JTSK","T4shapePlace_comb","T4shapePlace_buff",5514,10000)
-nullCluster("T4shapePlace_comb")
-clusterDefinition("T4shapePlace_comb","T4shapePlace_buff")
-clusterDefinition2("T4shapePlace_comb","T4shapePlace_buff","T4shapePlace_clust2")
+shapePlace("znacky.json","JTSK","T6shapePlace_comb","T6shapePlace_buff",5514,10000)
+#nullCluster("T4shapePlace_comb")
+#clusterDefinition3("T4shapePlace_comb","T4shapePlace_buff")
+#clusterDefinition2("T4shapePlace_comb","T4shapePlace_buff","T4shapePlace_clust2")
 
 #conflictDetection("NOVY","CONFLICTpOKUS1")
 
