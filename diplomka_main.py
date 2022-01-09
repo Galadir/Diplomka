@@ -232,8 +232,10 @@ def clusterDefinition2(inputFeature,inputBuffer,outputFeature ):
 def clusterDefinition3(inputFeature,inputBuffer):
     seconds1 = time.time()
 
-    #arcpy.analysis.Intersect(inputBuffer, "intersectFeatureClass")
-    arcpy.intelligence.FindOverlaps(inputBuffer, "outOverlapTemp", "outCentroidTemp")
+    arcpy.analysis.Intersect(inputBuffer, "intersectFeatureClass")
+    arcpy.management.Dissolve("intersectFeatureClass", "outOverlapTemp", ["Shape_Area"], "#", "SINGLE_PART")
+
+    #arcpy.intelligence.FindOverlaps(inputBuffer, "outOverlapTemp", "outCentroidTemp")
     arcpy.analysis.SpatialJoin(inputBuffer, "outOverlapTemp", "outSpatialTemp", "JOIN_ONE_TO_MANY", "KEEP_COMMON",
                                "#", "CONTAINS", 0)
 
@@ -275,7 +277,7 @@ def clusterDefinition3(inputFeature,inputBuffer):
             upCurs.updateRow(row)
 
     del seaCur
-    arcpy.management.Delete("'outSpatialTemp';'outSortTemp';'outOverlapTemp';'outCentroidTemp'")
+    arcpy.management.Delete("'outSpatialTemp';'outSortTemp';'outOverlapTemp';'outCentroidTemp';'intersectFeatureClass'")
 
     seconds2 = time.time()
     print(seconds2 - seconds1)
@@ -287,9 +289,9 @@ def nullCluster(inputFeature):
             upCurs.updateRow(row)
 
 #shape2 = shapeDefinition(inputShape_local,10000,"5514")
-shapePlace("znacky.json","JTSK","T6shapePlace_comb","T6shapePlace_buff",5514,10000)
+shapePlace("znacky.json","JTSK_1","T2comb","T2",5514,10000)
 #nullCluster("T4shapePlace_comb")
-#clusterDefinition3("T4shapePlace_comb","T4shapePlace_buff")
+clusterDefinition3("T2comb","T2")
 #clusterDefinition2("T4shapePlace_comb","T4shapePlace_buff","T4shapePlace_clust2")
 
 #conflictDetection("NOVY","CONFLICTpOKUS1")
