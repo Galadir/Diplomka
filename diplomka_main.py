@@ -101,6 +101,7 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
     # list všech zpracovaných tříd pro kontrolu při výstupu
     controlOutput = []
 
+    # vykreslení symbolů na souřadnice
     for symbol in symbols:
         print("zpracovavam " + symbol["name"])
 
@@ -232,16 +233,18 @@ def clusterDefinition2(inputFeature,inputBuffer,outputFeature ):
 def clusterDefinition3(inputFeature,inputBuffer):
     seconds1 = time.time()
 
+    # vytvoření vrstvy všech konfliktů
     arcpy.analysis.Intersect(inputBuffer, "intersectFeatureClass")
     arcpy.management.Dissolve("intersectFeatureClass", "outOverlapTemp", ["Shape_Area"], "#", "SINGLE_PART")
 
+    #přiřazení konfliktů k znakům
     #arcpy.intelligence.FindOverlaps(inputBuffer, "outOverlapTemp", "outCentroidTemp")
     arcpy.analysis.SpatialJoin(inputBuffer, "outOverlapTemp", "outSpatialTemp", "JOIN_ONE_TO_MANY", "KEEP_COMMON",
                                "#", "CONTAINS", 0)
 
     arcpy.management.Sort("outSpatialTemp", "outSortTemp", [["JOIN_FID", "ASCENDING"]])
 
-
+    # rozřazování do clusterů
     seaCur = arcpy.da.SearchCursor("outSortTemp",["ORIG_FID","JOIN_FID"])
     controlShape = 1
     clusterNum = 1
@@ -249,13 +252,19 @@ def clusterDefinition3(inputFeature,inputBuffer):
     for row in seaCur:
         if controlShape == row[1]:
             id=row[0]
+
+            # kontrola skutečnosti, že znak není v žádném clusteru
             if id not in outputDict:
                 outputDict[id]=clusterNum
+
+            # přepsání clusteru, pokud už je znak zařazen
             else:
                 x = outputDict[id]
                 for kay,value in outputDict.items():
                     if value == x:
                         outputDict[kay] = clusterNum
+
+        # přechod na další konflikt
         else:
             controlShape = row[1]
             clusterNum += 1
@@ -269,6 +278,8 @@ def clusterDefinition3(inputFeature,inputBuffer):
                         outputDict[kay] = clusterNum
 
     print(outputDict)
+
+    # zapsání clusteru do zdrojového souboru
     with arcpy.da.UpdateCursor(inputFeature, ['OBJECTID', 'CLUSTER']) as upCurs:
         for row in upCurs:
             #row[1] = 2
@@ -277,7 +288,7 @@ def clusterDefinition3(inputFeature,inputBuffer):
             upCurs.updateRow(row)
 
     del seaCur
-    arcpy.management.Delete("'outSpatialTemp';'outSortTemp';'outOverlapTemp';'outCentroidTemp';'intersectFeatureClass'")
+    #arcpy.management.Delete("'outSpatialTemp';'outSortTemp';'outOverlapTemp';'outCentroidTemp';'intersectFeatureClass'")
 
     seconds2 = time.time()
     print(seconds2 - seconds1)
@@ -289,9 +300,9 @@ def nullCluster(inputFeature):
             upCurs.updateRow(row)
 
 #shape2 = shapeDefinition(inputShape_local,10000,"5514")
-shapePlace("znacky.json","JTSK_1","T2comb","T2",5514,10000)
+#shapePlace("znacky.json","JTSK_1","T3comb","T3",5514,10000)
 #nullCluster("T4shapePlace_comb")
-clusterDefinition3("T2comb","T2")
+clusterDefinition3("T3comb","T3")
 #clusterDefinition2("T4shapePlace_comb","T4shapePlace_buff","T4shapePlace_clust2")
 
 #conflictDetection("NOVY","CONFLICTpOKUS1")
