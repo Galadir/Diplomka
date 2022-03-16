@@ -1,4 +1,5 @@
 import arcpy
+import math
 
 # definovani pracovního prostoru
 inputDatabase = "C:\\Users\\danie\\OneDrive\\Dokumenty\\ArcGIS\\Projects\\Diplomka\\Diplomka.gdb"
@@ -13,14 +14,19 @@ def netMake1 (layersNumber, distance):
     :param distance: vzdálenost mezi jednotlivými body
     :return:
     """
-    list = []
+    net = {}
     size = layersNumber * 2 + 1
+    num = 0
+    # procházení bodů v síti
     for i in range(-layersNumber,layersNumber+1):
         y = i*distance
         for j in range(-layersNumber, layersNumber+1):
             x = j*distance
-            list.append([x,y])
-    return list
+            # váha pozice pro její hodnocení jako přímá vzdálenost !!! KLÍČOVÉ PŘI UPRAVÁCH ALGORITMU !!!
+            weight = math.sqrt(x**2+y**2)
+            net[num] = {"xy":[x,y],"weight":weight}
+            num += 1
+    return net
 
 def detectConflicts(clusterGeom):
     """
@@ -75,6 +81,7 @@ def clusterSolve(inputFeature,cluster,distance):
         net = netMake1(int(int(row[3]) / distance), distance)
 
         geomAll = [] # seznam geometrií pro body v síti jednoho znaku
+        weightAll = [] # seznam váhy jednotlivých geometrií
         geom = row[0] # jedna geometrie v seznamu
 
         # vytvoření geometrie na místa v síti
@@ -82,15 +89,16 @@ def clusterSolve(inputFeature,cluster,distance):
             part = arcpy.Array() # pole do kterého nahraji tvar
             for point in geom: # procházím body z polygonu znaku
                 for nod in point: # procházím souřadnice v bodě
-                    pnt = arcpy.Point(nod.X+netPoint[0], nod.Y+netPoint[1])
+                    pnt = arcpy.Point(nod.X+net[netPoint]["xy"][0], nod.Y+net[netPoint]["xy"][1])
                     part.add(pnt)
             # vytvoření polygonu z pole
             polygon = arcpy.Polygon(part)
             geomAll.append(polygon)
+            weightAll.append(net[netPoint]["weight"])
             # vyčištění pole
             part.removeAll()
 
-        dict[symbolNum] = {"class":row[2],"geom":geomAll} #class by mělo být nahrazeno nějakým unikátním id
+        dict[symbolNum] = {"class":row[2],"geom":geomAll,"weight":weightAll} #class by mělo být nahrazeno nějakým unikátním id
         # arcpy.CopyFeatures_management(geomAll, "tvar"+str(symbolNum))
 
         symbolNum += 1
@@ -105,6 +113,9 @@ def clusterSolve(inputFeature,cluster,distance):
         :param dict:
         :return:
         """
+        winner = ""
+        winnerWeight = 999999999999999
+
         cfg = []  # konfigurace pozicí znaků
 
         # nastavení nul jakožto výchozích pozic v konfiguraci
@@ -112,23 +123,29 @@ def clusterSolve(inputFeature,cluster,distance):
             cfg.append(0)
 
         # rekurzivní procházení konfigurací vázaných na její určitou pozici
-        def next(cfg, i):
+        def next(cfg, i, winnerWeight, winner,dict):
             while cfg[i] < len(dict[i]["geom"]) - 1:
                 print(cfg)
 
                 # otestování konfliktu
                 clusterGeom =[] # všechny geometrie aktuální konfigurace
+                actualWeight = 0
                 for g in range(len(dict)):
                     clusterGeom.append(dict[g]["geom"][cfg[g]])
+                    actualWeight += dict[g]["weight"][cfg[g]]
+
 
                 # tvorba výstupu
                 if detectConflicts(clusterGeom):
+                    if actualWeight < winnerWeight:
+                        winner = clusterGeom
+                        winnerWeight = actualWeight
                     name = "cfg" # název souboru výstupu
                     for n in cfg:
                         name = name + str(n)
 
-                    print(name)
-                    arcpy.CopyFeatures_management(clusterGeom, name)
+                    #print(name)
+                    #arcpy.CopyFeatures_management(clusterGeom, name)
                 # konec testování a tvorby výstupu
 
                 cfg[i] += 1
@@ -136,17 +153,21 @@ def clusterSolve(inputFeature,cluster,distance):
                 j = i
                 while j != 0:
                     j -= 1
-                    next(cfg, j)
+                    winnerWeight, winner = next(cfg, j, winnerWeight, winner,dict)
 
             cfg[i] = 0
-            return
+            return winnerWeight, winner
 
         # procházení pozic v konfiguraci a volání funkce
+
         for x in range(len(cfg)):
             # print("další forcyklus")
-            next(cfg, x)
+            winnerWeight, winner = next(cfg, x, winnerWeight, winner,dict)
+        arcpy.CopyFeatures_management(winner, "best")
 
     configuration(dict)
 
 
 clusterSolve("T3comb",212,10)
+
+print(netMake1(1,5))
