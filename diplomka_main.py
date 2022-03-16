@@ -36,7 +36,7 @@ def shapeDefinition(shapeInput,scale,epsg):
     """
     Definuje tvar v metrech podle zadaného měřítka a souřadnicového systému.
 
-    :param shapeInput: definice tvaru znaku
+    :param shapeInput: definice tvaru znaku jako seznam
     :param scale: meritkove cislo
     :param epsg: definice souradnicoveho systemu
     :return: seznam souradnic hranic prvku v bode 0
