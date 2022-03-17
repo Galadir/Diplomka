@@ -39,7 +39,8 @@ def detectConflicts(clusterGeom):
     :return: Boolean – pokud True, je bez konfliktu
     """
     # výsledná boolean hodnota
-    confall = True
+    confNum = 0
+
 
     # procházení konfliktních situací
     for g1 in range(len(clusterGeom)):
@@ -47,12 +48,12 @@ def detectConflicts(clusterGeom):
             if g1 != g2 and g1 < g2:
                 conf = clusterGeom[g1].disjoint(clusterGeom[g2])
                 if not conf:
-                    confall = conf
+                    confNum += 1
 
-                # print(str(g1) + " x " + str(g2) + " = " + str(conf))
+                #print(str(g1) + " x " + str(g2) + " = " + str(conf))
 
-    print(confall)
-    return confall
+    print(str(confNum))
+    return confNum
 
 def netMake1(layersNumber, distance):
     """
@@ -250,8 +251,9 @@ def clusterSolve(inputFeature,cluster,distance):
 
     # ověření, jestli opravdu existuje konflikt, v případě, že jsme bez konfliktu, je nejvhodnějším výstupem výchozí rozložení
     geometries = arcpy.CopyFeatures_management(clust, arcpy.Geometry())
-    if detectConflicts(geometries):
-        return
+    if detectConflicts(geometries) == 0:
+        outputGeometries = geometries
+        return outputGeometries
 
     # vybrané atributy !!! MŮŽE BÝT KLÍČOVÉ PRO ZADÁNÍ PARAMETRŮ PŘI UPRAVÁCH ALGORITMU !!!
     seaCur = arcpy.da.SearchCursor(clust, ["SHAPE@","OBJECTID", "CLASS","SHIFT","X1","Y1"])
@@ -294,8 +296,14 @@ def clusterSolve(inputFeature,cluster,distance):
         :param dict:
         :return:
         """
+        outputGeometries = []
         winner = ""
         winnerWeight = 999999999999999
+        maxWeight = 0
+        for wg in range(len(dict)):
+            maxActual = max(dict[wg]["weight"])
+            if maxActual > maxWeight:
+                maxWeight = maxActual
 
         cfg = []  # konfigurace pozicí znaků
 
@@ -317,16 +325,17 @@ def clusterSolve(inputFeature,cluster,distance):
 
 
                 # tvorba výstupu
-                if detectConflicts(clusterGeom):
-                    if actualWeight < winnerWeight:
-                        winner = clusterGeom
-                        winnerWeight = actualWeight
-                    name = "cfg" # název souboru výstupu
-                    for n in cfg:
-                        name = name + str(n)
+                detect = detectConflicts(clusterGeom)
 
-                    #print(name)
-                    #arcpy.CopyFeatures_management(clusterGeom, name)
+                if detect != 0:
+                    actualWeight += detect*maxWeight
+
+                if actualWeight < winnerWeight:
+                    winner = clusterGeom
+                    winnerWeight = actualWeight
+                    print(winnerWeight)
+
+
                 # konec testování a tvorby výstupu
 
                 cfg[i] += 1
@@ -344,10 +353,37 @@ def clusterSolve(inputFeature,cluster,distance):
         for x in range(len(cfg)):
             # print("další forcyklus")
             winnerWeight, winner = next(cfg, x, winnerWeight, winner,dict)
-        arcpy.CopyFeatures_management(winner, "best197")
 
-    configuration(dict)
+        if winner == "":
+            print("Aktuální nastavení neumožňuje žádný pohyb s body")
+            # arcpy.CopyFeatures_management(geometries, "best164")
+            outputGeometries += geometries
+        else:
+            # arcpy.CopyFeatures_management(winner, "best198")
+            outputGeometries += winner
+        return outputGeometries
+
+    outputGeometries = configuration(dict)
+
+    return outputGeometries
+
+mainFeature = "FeatureTest2"
+mainBuffer = mainFeature + "_Buffer"
+mainOutput = "bestOutput2"
 
 #shapePlace("znacky.json","JTSK_1","T1feature","T1buffer",5514,10000)
-#clusterDefinition("FeatureTest","FeatureTest_Buffer")
-clusterSolve("FeatureTest",197,10)
+clusterDefinition(mainFeature,mainBuffer)
+
+seaCur_clust = arcpy.da.SearchCursor(mainFeature, ["CLUSTER"])
+clusters = []
+clusterGeometries = []
+
+for row in seaCur_clust:
+    if row[0] not in clusters:
+        clusters.append(row[0])
+
+for cluster in clusters:
+    clusterOutput = clusterSolve(mainFeature,cluster,10)
+    clusterGeometries += clusterOutput
+
+arcpy.CopyFeatures_management(clusterGeometries, mainOutput)
