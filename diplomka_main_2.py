@@ -111,9 +111,10 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
     arcpy.AddField_management(outputFeature, "CLASS", "TEXT")
     arcpy.AddField_management(outputFeature, "SHIFT", "TEXT")
     arcpy.AddField_management(outputFeature, "CLUSTER", "SHORT")
+    arcpy.AddField_management(outputFeature, "FID_ZBG", "TEXT")
 
 
-    insCur = arcpy.da.InsertCursor(outputFeature,["SHAPE@", "X1", "Y1", "CLASS","SHIFT","CLUSTER"])
+    insCur = arcpy.da.InsertCursor(outputFeature,["SHAPE@", "X1", "Y1", "CLASS","SHIFT","CLUSTER","FID_ZBG"])
 
     # prochazeni definovanych znacek
     with open(symbolsJSON, encoding='UTF-8') as f:
@@ -133,7 +134,7 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
 
         # výjimka pro případ chybného definování názvu znaku
         try:
-            seaCur = arcpy.da.SearchCursor(coords, ["SHAPE@"])
+            seaCur = arcpy.da.SearchCursor(coords, ["SHAPE@","FID_ZBG"])
         except RuntimeError:
             print("\nNEZPRACOVÁNO '" + coords + "': soubor s tímto názvem pravděpodobně neexistuje \n \n")
             continue
@@ -157,7 +158,7 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
             polygon = arcpy.Polygon(part)
             # vyčištění pole
             part.removeAll()
-            insCur.insertRow((polygon, pnt1.X,pnt1.Y,symbol["name"],symbol["allowedShift"],0))
+            insCur.insertRow((polygon, pnt1.X,pnt1.Y,symbol["name"],symbol["allowedShift"],0,row[1]))
 
     del insCur
 
@@ -371,7 +372,7 @@ mainFeature = "FeatureTest2"
 mainBuffer = mainFeature + "_Buffer"
 mainOutput = "bestOutput2"
 
-#shapePlace("znacky.json","JTSK_1","T1feature","T1buffer",5514,10000)
+#shapePlace("znacky.json","JTSK_1","T2feature","T2buffer",5514,10000)
 clusterDefinition(mainFeature,mainBuffer)
 
 seaCur_clust = arcpy.da.SearchCursor(mainFeature, ["CLUSTER"])
