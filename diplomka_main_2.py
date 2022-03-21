@@ -234,7 +234,7 @@ def clusterDefinition(inputFeature,inputBuffer):
     seconds2 = time.time()
     print(seconds2 - seconds1)
 
-def clusterSolve(inputFeature,cluster,distance):
+def clusterSolve(inputFeature,cluster,distance,outputFeature):
     """
     Vrátí nejlepší řešení konfliktu mezi znaky v jednom shluku podle zadaných parametrů.
 
@@ -257,7 +257,7 @@ def clusterSolve(inputFeature,cluster,distance):
         return outputGeometries
 
     # vybrané atributy !!! MŮŽE BÝT KLÍČOVÉ PRO ZADÁNÍ PARAMETRŮ PŘI UPRAVÁCH ALGORITMU !!!
-    seaCur = arcpy.da.SearchCursor(clust, ["SHAPE@","OBJECTID", "CLASS","SHIFT","X1","Y1"])
+    seaCur = arcpy.da.SearchCursor(clust, ["SHAPE@","OBJECTID", "CLASS","SHIFT","X1","Y1","FID_ZBG"])
 
     symbolNum = 0 # identifikační číslo znaku v slovníku – spojité od 0 do n
     for row in seaCur:
@@ -282,7 +282,7 @@ def clusterSolve(inputFeature,cluster,distance):
             # vyčištění pole
             part.removeAll()
 
-        dict[symbolNum] = {"class":row[2],"geom":geomAll,"weight":weightAll} #class by mělo být nahrazeno nějakým unikátním id
+        dict[symbolNum] = {"id":row[6],"geom":geomAll,"weight":weightAll,"x":row[4],"y":row[5],"class":row[2]} #class by mělo být nahrazeno nějakým unikátním id
         # arcpy.CopyFeatures_management(geomAll, "tvar"+str(symbolNum))
 
         symbolNum += 1
@@ -298,7 +298,7 @@ def clusterSolve(inputFeature,cluster,distance):
         :return:
         """
         outputGeometries = []
-        winner = ""
+        winner = []
         winnerWeight = 999999999999999
         maxWeight = 0
         for wg in range(len(dict)):
@@ -332,7 +332,7 @@ def clusterSolve(inputFeature,cluster,distance):
                     actualWeight += detect*maxWeight
 
                 if actualWeight < winnerWeight:
-                    winner = clusterGeom
+                    winner = list(cfg)
                     winnerWeight = actualWeight
                     print(winnerWeight)
 
@@ -355,24 +355,24 @@ def clusterSolve(inputFeature,cluster,distance):
             # print("další forcyklus")
             winnerWeight, winner = next(cfg, x, winnerWeight, winner,dict)
 
-        if winner == "":
+        if winner == []:
             print("Aktuální nastavení neumožňuje žádný pohyb s body")
             # arcpy.CopyFeatures_management(geometries, "best164")
-            outputGeometries += geometries
-        else:
-            # arcpy.CopyFeatures_management(winner, "best198")
-            outputGeometries += winner
-        return outputGeometries
+            winner += cfg
+        return winner
 
-    outputGeometries = configuration(dict)
+    winnerCFG = configuration(dict)
 
-    return outputGeometries
+    insCur = arcpy.da.InsertCursor(outputFeature, ["SHAPE@","X1","Y1","FID_ZBG","CLASS"])
+    for pos in range(len(dict)):
+        insCur.insertRow((dict[pos]["geom"][winnerCFG[pos]],dict[pos]["x"],dict[pos]["y"],dict[pos]["id"],dict[pos]["class"]))
 
 mainFeature = "FeatureTest2"
 mainBuffer = mainFeature + "_Buffer"
-mainOutput = "bestOutput2"
+mainOutput = "bestOutput5"
+mainSR = 5514
 
-#shapePlace("znacky.json","JTSK_1","T2feature","T2buffer",5514,10000)
+#shapePlace("znacky.json","JTSK_1","T2feature","T2buffer",mainSR,10000)
 clusterDefinition(mainFeature,mainBuffer)
 
 seaCur_clust = arcpy.da.SearchCursor(mainFeature, ["CLUSTER"])
@@ -383,8 +383,14 @@ for row in seaCur_clust:
     if row[0] not in clusters:
         clusters.append(row[0])
 
-for cluster in clusters:
-    clusterOutput = clusterSolve(mainFeature,cluster,10)
-    clusterGeometries += clusterOutput
+arcpy.CreateFeatureclass_management(arcpy.env.workspace, mainOutput, "POLYGON", "#", "#", "#", mainSR)
 
-arcpy.CopyFeatures_management(clusterGeometries, mainOutput)
+# přidání odpovídajících polí atributové tabulky
+arcpy.AddField_management(mainOutput, "X1", "DOUBLE")
+arcpy.AddField_management(mainOutput, "Y1", "DOUBLE")
+arcpy.AddField_management(mainOutput, "CLASS", "TEXT")
+arcpy.AddField_management(mainOutput, "FID_ZBG", "TEXT")
+
+for cluster in clusters:
+    clusterSolve(mainFeature,cluster,10,mainOutput)
+
