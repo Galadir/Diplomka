@@ -13,10 +13,10 @@ def shapeDefinition(shapeInput,scale,epsg):
     """
     Definuje tvar v metrech podle zadaného měřítka a souřadnicového systému.
 
-    :param shapeInput: definice tvaru znaku jako seznam
+    :param shapeInput: definice tvaru znaku v milimetrech jako seznam
     :param scale: meritkove cislo
     :param epsg: definice souradnicoveho systemu
-    :return: seznam souradnic hranic prvku v bode 0
+    :return: seznam souradnic hranic znaku v bode 0
     """
     shapeOutput = []
     if epsg in [32633,5514]:
@@ -28,19 +28,16 @@ def shapeDefinition(shapeInput,scale,epsg):
     else:
         raise ValueError("Pro zadaný souřadnicový systém ve funkci shapeDefinition není definován výpočet")
 
-    print(shapeOutput)
     return shapeOutput
 
 def detectConflicts(clusterGeom):
     """
     Určí, zda mezi vstupními geometriemi dochází k průniku.
 
-    :param clusterGeom: seznam acrpy geometrií, mezi kterými je třeba určit
-    :return: Boolean – pokud True, je bez konfliktu
+    :param clusterGeom: seznam acrpy geometrií, mezi kterými je třeba určit konflikt
+    :return: Počet konfliktů ke kterým mezi geometriemi dochází
     """
-    # výsledná boolean hodnota
-    confNum = 0
-
+    confNum = 0 # výsledná číselná hodnota
 
     # procházení konfliktních situací
     for g1 in range(len(clusterGeom)):
@@ -51,15 +48,13 @@ def detectConflicts(clusterGeom):
                     confNum += 1
 
                 #print(str(g1) + " x " + str(g2) + " = " + str(conf))
-
-    print(str(confNum))
     return confNum
 
 def netMake1(layersNumber, distance):
     """
     Vytvoří pravidelnou čtvercovou síť bodů na základě zadané vzdálenosti mezi body.
 
-    :param layersNumber: počet vrstev v pravidelné síti 1 vrstva = síť 3x3, 2 vrstvy = síť 5x5
+    :param layersNumber: počet vrstev v pravidelné síti (1 vrstva = síť 3x3, 2 vrstvy = síť 5x5)
     :param distance: vzdálenost mezi jednotlivými body
     :return:
     """
@@ -83,7 +78,7 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
     v datasetu ZABAGED vytvoreny polygony odpovídající kartografickému
     znaku pro danou třídu v zadaném měřítku a souřadnicovém systému.
 
-    Krome toho vytvari polygonovou vrstvu, která kolem zmíněných polygonů
+    Krome toho vytvari vrstvu, která kolem zmíněných polygonů
     utvoří obalovou zonu podle maximálního povoleného posunu znaku.
 
     :param symbolsJSON: cesta k souboru s definici znakoveho klice
@@ -94,15 +89,15 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
     :param scale: meritkove cislo, pro ktere maji byt vypocitany velikosti polygonu
     :return:
     """
+    print("DEFINUJI ZNAKY JAKO POLGONY NA ZADANÝCH SOUŘADNICÍCH")
 
     # definování souradnicoveho systemu
     sr = arcpy.SpatialReference(epsg) # EPSG kod
     # sr = arcpy.Describe(inputDataset).spatialReference
 
-    # vytvoreni datasetu k ukladani polygonů
+    # vytvoreni souboru k ukladani polygonů
     if not arcpy.Exists(outputFeature):
         arcpy.Delete_management(outputFeature)
-
     arcpy.CreateFeatureclass_management(arcpy.env.workspace, outputFeature, "POLYGON", "#", "#", "#", sr)
 
     # přidání odpovídajících polí atributové tabulky
@@ -172,6 +167,14 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
     arcpy.analysis.Buffer(outputFeature, outputBuffer, "SHIFT")
 
 def clusterDefinition(inputFeature,inputBuffer):
+    """
+    Přiřadí do souboru inputFeature atribut určující u každého polygonu příslušnost ke konkrétnímu shluku.
+
+    :param inputFeature: umístění souboru se znaky
+    :param inputBuffer: umístění souboru s obalovými zónami
+    :return:
+    """
+    print("\nDEFINUJI SHLUKY ZNAKŮ")
     seconds1 = time.time()
 
     # vytvoření vrstvy všech konfliktů
@@ -218,7 +221,7 @@ def clusterDefinition(inputFeature,inputBuffer):
                     if value == x:
                         outputDict[kay] = clusterNum
 
-    print(outputDict)
+    print("Přehled přiřazení do clusterů:" + str(outputDict))
 
     # zapsání clusteru do zdrojového souboru
     with arcpy.da.UpdateCursor(inputFeature, ['OBJECTID', 'CLUSTER']) as upCurs:
@@ -232,7 +235,7 @@ def clusterDefinition(inputFeature,inputBuffer):
     #arcpy.management.Delete("'outSpatialTemp';'outSortTemp';'outOverlapTemp';'outCentroidTemp';'intersectFeatureClass'")
 
     seconds2 = time.time()
-    print(seconds2 - seconds1)
+    print("Clustery byly definovány za {} sekund".format((seconds2 - seconds1)))
 
 def clusterSolve(inputFeature,cluster,distance,outputFeature):
     """
@@ -241,20 +244,20 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
     :param inputFeature: cesta k souboru, ze kterého je brána geometrie
     :param cluster: cluster, pro který je problém řešený
     # DALŠÍ PARAMETRY MOHOU BÝT KLÍČOVÉ PŘI UPRAVÁCH ALGORITMU !!!
-    :param distance: Rozestupy mezi
+    :param distance: Rozestupy mezi pozicemi v síti
+    :param outputFeature: cesta k souboru, do kterého jsou ukládány polygony znaků v nejlepší konfiguraci
     :return:
     """
+
+    seconds1 = time.time()
+
+    print("\nŘEŠÍM CLUSTER {}".format(cluster))
     dict = {} # slovník, který obsahuje identifikaci znaku a seznam geometrií na možných pozicích po provedení posunu
 
 
     # výběr znaků ve shluku z celkové množiny znaků
     clust = arcpy.SelectLayerByAttribute_management(inputFeature, "NEW_SELECTION","CLUSTER = "+str(cluster))
 
-    # ověření, jestli opravdu existuje konflikt, v případě, že jsme bez konfliktu, je nejvhodnějším výstupem výchozí rozložení
-    geometries = arcpy.CopyFeatures_management(clust, arcpy.Geometry())
-    if detectConflicts(geometries) == 0:
-        outputGeometries = geometries
-        return outputGeometries
 
     # vybrané atributy !!! MŮŽE BÝT KLÍČOVÉ PRO ZADÁNÍ PARAMETRŮ PŘI UPRAVÁCH ALGORITMU !!!
     seaCur = arcpy.da.SearchCursor(clust, ["SHAPE@","OBJECTID", "CLASS","SHIFT","X1","Y1","FID_ZBG"])
@@ -286,9 +289,19 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
         # arcpy.CopyFeatures_management(geomAll, "tvar"+str(symbolNum))
 
         symbolNum += 1
+    del seaCur
 
+    print("Obsah clusteru: " + str(dict))
 
-    print(dict)
+    # ověření, jestli opravdu existuje konflikt, v případě, že jsme bez konfliktu, je nejvhodnějším výstupem výchozí rozložení
+    geometries = arcpy.CopyFeatures_management(clust, arcpy.Geometry())
+    if detectConflicts(geometries) == 0:
+        insCur = arcpy.da.InsertCursor(outputFeature, ["SHAPE@", "X1", "Y1", "FID_ZBG", "CLASS"])
+        for pos in range(len(dict)):
+            insCur.insertRow((geometries[pos], dict[pos]["x"], dict[pos]["y"], dict[pos]["id"],dict[pos]["class"]))
+        del insCur
+        print("Cluster {} je bez konfliktů.".format(cluster))
+        return
 
     def configuration(dict):
         """
@@ -315,7 +328,7 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
         # rekurzivní procházení konfigurací vázaných na její určitou pozici
         def next(cfg, i, winnerWeight, winner,dict):
             while cfg[i] < len(dict[i]["geom"]) - 1:
-                print(cfg)
+                #print(cfg)
 
                 # otestování konfliktu
                 clusterGeom =[] # všechny geometrie aktuální konfigurace
@@ -328,13 +341,15 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
                 # tvorba výstupu
                 detect = detectConflicts(clusterGeom)
 
+                # print("Pro konfiguraci {} nalezeno {} konfliktů.".format(cfg,detect))
+
                 if detect != 0:
                     actualWeight += detect*maxWeight
 
                 if actualWeight < winnerWeight:
                     winner = list(cfg)
                     winnerWeight = actualWeight
-                    print(winnerWeight)
+                    # print("Tato konfigurace je aktuálně nejlepší s váhou: {}".format(winnerWeight))
 
 
                 # konec testování a tvorby výstupu
@@ -356,20 +371,24 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
             winnerWeight, winner = next(cfg, x, winnerWeight, winner,dict)
 
         if winner == []:
-            print("Aktuální nastavení neumožňuje žádný pohyb s body")
+            print("Při současném nastacení pro shluk neexistuje žádné lepší řešení než výchozí")
             # arcpy.CopyFeatures_management(geometries, "best164")
             winner += cfg
         return winner
 
     winnerCFG = configuration(dict)
 
+    seconds2 = time.time()
+    print("Cluster {}, který obsahuje {} znaků, je vyřešen za {} sekund.".format(cluster,len(dict),(seconds2-seconds1)))
+
     insCur = arcpy.da.InsertCursor(outputFeature, ["SHAPE@","X1","Y1","FID_ZBG","CLASS"])
     for pos in range(len(dict)):
         insCur.insertRow((dict[pos]["geom"][winnerCFG[pos]],dict[pos]["x"],dict[pos]["y"],dict[pos]["id"],dict[pos]["class"]))
+    del insCur
 
-mainFeature = "FeatureTest2"
+mainFeature = "FeatureTest3"
 mainBuffer = mainFeature + "_Buffer"
-mainOutput = "bestOutput5"
+mainOutput = "bestOutput7"
 mainSR = 5514
 
 #shapePlace("znacky.json","JTSK_1","T2feature","T2buffer",mainSR,10000)
@@ -390,6 +409,9 @@ arcpy.AddField_management(mainOutput, "X1", "DOUBLE")
 arcpy.AddField_management(mainOutput, "Y1", "DOUBLE")
 arcpy.AddField_management(mainOutput, "CLASS", "TEXT")
 arcpy.AddField_management(mainOutput, "FID_ZBG", "TEXT")
+
+# clustery seřazené podle počtu prvků
+# clusters = [118, 88, 94, 117, 110]
 
 for cluster in clusters:
     clusterSolve(mainFeature,cluster,10,mainOutput)
