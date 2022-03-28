@@ -392,7 +392,7 @@ mainOutput = "bestOutput7"
 mainSR = 5514
 
 #shapePlace("znacky.json","JTSK_1","T2feature","T2buffer",mainSR,10000)
-clusterDefinition(mainFeature,mainBuffer)
+#clusterDefinition(mainFeature,mainBuffer)
 
 seaCur_clust = arcpy.da.SearchCursor(mainFeature, ["CLUSTER"])
 clusters = []
@@ -411,8 +411,8 @@ arcpy.AddField_management(mainOutput, "CLASS", "TEXT")
 arcpy.AddField_management(mainOutput, "FID_ZBG", "TEXT")
 
 # clustery seřazené podle počtu prvků
-# clusters = [118, 88, 94, 117, 110]
+clusters = [118, 88, 94, 117, 110]
 
 for cluster in clusters:
-    clusterSolve(mainFeature,cluster,10,mainOutput)
+    clusterSolve(mainFeature,cluster,5,mainOutput)
 
