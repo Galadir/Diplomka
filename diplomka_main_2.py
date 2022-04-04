@@ -55,7 +55,7 @@ def detectConflicts(clusterGeom):
                     confLoc[g2] += 1
 
                 #print(str(g1) + " x " + str(g2) + " = " + str(conf))
-                print(confLoc)
+                print("confLoc = " + str(confLoc))
     return confNum, confLoc
 
 def netMake1(layersNumber, distance):
@@ -316,7 +316,8 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
     # vymazání sítě pro znaky, které nejsou v původním nastavení v konfliktu
     for d in range(len(dict)):
         if detectLoc[d] == 0:
-            dict[d]["geom"] = geometries[d]
+            dict[d]["geom"] = [geometries[d]]
+            dict[d]["weight"] = [0.0]
 
     def configuration(dict):
         """
@@ -356,7 +357,7 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
                 # tvorba výstupu
                 detect,detectLoc = detectConflicts(clusterGeom)
 
-                # print("Pro konfiguraci {} nalezeno {} konfliktů.".format(cfg,detect))
+                print("Pro konfiguraci {} nalezeno {} konfliktů.".format(cfg,detect))
 
                 if detect != 0:
                     actualWeight += detect*maxWeight
@@ -403,7 +404,7 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
 
 mainFeature = "FeatureTest2"
 mainBuffer = mainFeature + "_Buffer"
-mainOutput = "bestOutput8"
+mainOutput = "bestOutput9"
 mainSR = 5514
 
 #shapePlace("znacky.json","JTSK_1","T2feature","T2buffer",mainSR,10000)
@@ -427,7 +428,7 @@ arcpy.AddField_management(mainOutput, "FID_ZBG", "TEXT")
 
 # clustery seřazené podle počtu prvků
 #clusters = [118, 88, 94, 117, 110]
-clusters = [30]
+clusters = [29]
 
 for cluster in clusters:
     clusterSolve(mainFeature,cluster,5,mainOutput)
