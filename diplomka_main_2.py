@@ -38,6 +38,11 @@ def detectConflicts(clusterGeom):
     :return: Počet konfliktů ke kterým mezi geometriemi dochází
     """
     confNum = 0 # výsledná číselná hodnota
+    confLoc = []
+
+    for i in range(len(clusterGeom)):
+        confLoc.append(0)
+
 
     # procházení konfliktních situací
     for g1 in range(len(clusterGeom)):
@@ -46,9 +51,12 @@ def detectConflicts(clusterGeom):
                 conf = clusterGeom[g1].disjoint(clusterGeom[g2])
                 if not conf:
                     confNum += 1
+                    confLoc[g1] += 1
+                    confLoc[g2] += 1
 
                 #print(str(g1) + " x " + str(g2) + " = " + str(conf))
-    return confNum
+                print(confLoc)
+    return confNum, confLoc
 
 def netMake1(layersNumber, distance):
     """
@@ -295,13 +303,20 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
 
     # ověření, jestli opravdu existuje konflikt, v případě, že jsme bez konfliktu, je nejvhodnějším výstupem výchozí rozložení
     geometries = arcpy.CopyFeatures_management(clust, arcpy.Geometry())
-    if detectConflicts(geometries) == 0:
+    detectNum,detectLoc = detectConflicts(geometries)
+    if detectNum == 0:
+        # vložení původních geometrií do výstupu s potřebnými informacemi
         insCur = arcpy.da.InsertCursor(outputFeature, ["SHAPE@", "X1", "Y1", "FID_ZBG", "CLASS"])
         for pos in range(len(dict)):
             insCur.insertRow((geometries[pos], dict[pos]["x"], dict[pos]["y"], dict[pos]["id"],dict[pos]["class"]))
         del insCur
         print("Cluster {} je bez konfliktů.".format(cluster))
         return
+
+    # vymazání sítě pro znaky, které nejsou v původním nastavení v konfliktu
+    for d in range(len(dict)):
+        if detectLoc[d] == 0:
+            dict[d]["geom"] = geometries[d]
 
     def configuration(dict):
         """
@@ -339,7 +354,7 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
 
 
                 # tvorba výstupu
-                detect = detectConflicts(clusterGeom)
+                detect,detectLoc = detectConflicts(clusterGeom)
 
                 # print("Pro konfiguraci {} nalezeno {} konfliktů.".format(cfg,detect))
 
@@ -386,9 +401,9 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
         insCur.insertRow((dict[pos]["geom"][winnerCFG[pos]],dict[pos]["x"],dict[pos]["y"],dict[pos]["id"],dict[pos]["class"]))
     del insCur
 
-mainFeature = "FeatureTest3"
+mainFeature = "FeatureTest2"
 mainBuffer = mainFeature + "_Buffer"
-mainOutput = "bestOutput7"
+mainOutput = "bestOutput8"
 mainSR = 5514
 
 #shapePlace("znacky.json","JTSK_1","T2feature","T2buffer",mainSR,10000)
@@ -411,7 +426,8 @@ arcpy.AddField_management(mainOutput, "CLASS", "TEXT")
 arcpy.AddField_management(mainOutput, "FID_ZBG", "TEXT")
 
 # clustery seřazené podle počtu prvků
-clusters = [118, 88, 94, 117, 110]
+#clusters = [118, 88, 94, 117, 110]
+clusters = [30]
 
 for cluster in clusters:
     clusterSolve(mainFeature,cluster,5,mainOutput)
