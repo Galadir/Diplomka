@@ -245,6 +245,39 @@ def clusterDefinition(inputFeature,inputBuffer):
     seconds2 = time.time()
     print("Clustery byly definovány za {} sekund".format((seconds2 - seconds1)))
 
+def rasterComparsion(conf, dict):
+    """
+
+    :param conf:
+    :return:
+    """
+
+    # volba objektu ve slovníku
+    dictNum = 0
+
+    rasterNames = []
+    expression = ""
+
+    for cg in conf:
+        rasterName = "r"+str(dictNum)+str(cg)
+        if expression != "":
+            expression += "+"
+
+        if not arcpy.Exists(rasterName):
+            arcpy.management.CopyFeatures(dict[dictNum]["geom"][cg],"temp_cgGeom")
+            arcpy.conversion.PolygonToRaster("temp_cgGeom", "OBJECTID", "temp_" + rasterName, "MAXIMUM_AREA", "#", 4)
+            raster = arcpy.sa.Con(arcpy.sa.IsNull("temp_" + rasterName), 0, "temp_" + rasterName)
+            raster.save(rasterName)
+            arcpy.Delete_management("temp_" + rasterName)
+            arcpy.Delete_management("temp_smbGeom")
+        rasterNames.append(rasterName)
+        expression += rasterName
+        dictNum += 1
+
+
+    out_rc_multi_raster = arcpy.sa.RasterCalculator(rasterNames,rasterNames,expression)
+    out_rc_multi_raster.save("rr")
+
 def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
     """
     Vrátí nejlepší řešení konfliktu mezi znaky v jednom shluku podle zadaných parametrů.
@@ -321,21 +354,23 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
             dict[d]["geom"] = [geometries[d]]
             dict[d]["weight"] = [0.0]
 
-    # definování rozsahu znaků (včetně možných posunů) pro tvorbu rastru
-    clustBuffer = arcpy.SelectLayerByAttribute_management(inputBuffer, "NEW_SELECTION", "CLUSTER = " + str(cluster))
+    # definování rozsahu znaků (včetně možných posunů) pro tvorby rastru
+    # clustBuffer = arcpy.SelectLayerByAttribute_management(inputBuffer, "NEW_SELECTION", "CLUSTER = " + str(cluster))
     arcpy.analysis.Buffer(clust, "temp_clustBuffer", "SHIFT")
     arcpy.env.extent = arcpy.Describe("temp_clustBuffer").extent
     print(arcpy.Describe("temp_clustBuffer").extent)
 
-    arcpy.management.CreateMosaicDataset(arcpy.env.workspace, "rastry", sr)
-    for symb in dict:
-        for symbGeomNum in range(len(dict[symb]["geom"])):
-            arcpy.management.CopyFeatures(dict[symb]["geom"][symbGeomNum], "temp_smbGeom")
-            rasterName = "r"+str(symb)+str(symbGeomNum)
-            arcpy.conversion.PolygonToRaster("temp_smbGeom", "OBJECTID", "temp_"+rasterName, "MAXIMUM_AREA","#",4)
-            raster = arcpy.sa.Con(arcpy.sa.IsNull("temp_"+rasterName),0, "temp_"+rasterName)
-            raster.save(rasterName)
-            arcpy.Delete_management("temp_"+rasterName)
+    # arcpy.management.CreateMosaicDataset(arcpy.env.workspace, "rastry", sr)
+    # for symb in dict:
+    #     for symbGeomNum in range(len(dict[symb]["geom"])):
+    #         arcpy.management.CopyFeatures(dict[symb]["geom"][symbGeomNum], "temp_smbGeom")
+    #         rasterName = "r"+str(symb)+str(symbGeomNum)
+    #         arcpy.conversion.PolygonToRaster("temp_smbGeom", "OBJECTID", "temp_"+rasterName, "MAXIMUM_AREA","#",4)
+    #         raster = arcpy.sa.Con(arcpy.sa.IsNull("temp_"+rasterName),0, "temp_"+rasterName)
+    #         raster.save(rasterName)
+    #         arcpy.Delete_management("temp_"+rasterName)
+
+
 
     def configuration(dict):
         """
@@ -347,6 +382,9 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
         outputGeometries = []
         winner = []
         winnerWeight = 999999999999999
+        solution = False # Existuje konfigurace bez konfliktu?
+
+        # nalezení největší váhy pro vážení v případech, že nelze nalézt konfiguraci bez konfliktu
         maxWeight = 0
         for wg in range(len(dict)):
             maxActual = max(dict[wg]["weight"])
@@ -360,7 +398,7 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
             cfg.append(0)
 
         # rekurzivní procházení konfigurací vázaných na její určitou pozici
-        def next(cfg, i, winnerWeight, winner,dict):
+        def next(cfg, i, winnerWeight, winner,dict,solution):
             while cfg[i] < len(dict[i]["geom"]) - 1:
                 #print(cfg)
 
@@ -377,8 +415,17 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
 
                 print("Pro konfiguraci {} nalezeno {} konfliktů.".format(cfg,detect))
 
+                if detect == 0:
+                    solution = True
+
                 if detect != 0:
                     actualWeight += detect*maxWeight
+                    # vážení konfliktu podle průniku v rasteru (pouze v případě, že není řešení bez konfliktu)
+                    if not solution:
+                        print("Tvoří se rastr")
+                        rasterComparsion(cfg, dict)
+
+
 
                 if actualWeight < winnerWeight:
                     winner = list(cfg)
@@ -393,16 +440,16 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
                 j = i
                 while j != 0:
                     j -= 1
-                    winnerWeight, winner = next(cfg, j, winnerWeight, winner,dict)
+                    winnerWeight, winner, solution = next(cfg, j, winnerWeight, winner,dict, solution)
 
             cfg[i] = 0
-            return winnerWeight, winner
+            return winnerWeight, winner, solution
 
         # procházení pozic v konfiguraci a volání funkce
 
         for x in range(len(cfg)):
             # print("další forcyklus")
-            winnerWeight, winner = next(cfg, x, winnerWeight, winner,dict)
+            winnerWeight, winner, solution = next(cfg, x, winnerWeight, winner,dict, solution)
 
         if winner == []:
             print("Při současném nastacení pro shluk neexistuje žádné lepší řešení než výchozí")
