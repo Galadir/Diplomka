@@ -55,7 +55,7 @@ def detectConflicts(clusterGeom):
                     confLoc[g2] += 1
 
                 #print(str(g1) + " x " + str(g2) + " = " + str(conf))
-                print("confLoc = " + str(confLoc))
+    print("confLoc = " + str(confLoc))
     return confNum, confLoc
 
 def netMake1(layersNumber, distance):
@@ -245,7 +245,7 @@ def clusterDefinition(inputFeature,inputBuffer):
     seconds2 = time.time()
     print("Clustery byly definovány za {} sekund".format((seconds2 - seconds1)))
 
-def clusterSolve(inputFeature,cluster,distance,outputFeature):
+def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
     """
     Vrátí nejlepší řešení konfliktu mezi znaky v jednom shluku podle zadaných parametrů.
 
@@ -271,6 +271,8 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
     seaCur = arcpy.da.SearchCursor(clust, ["SHAPE@","OBJECTID", "CLASS","SHIFT","X1","Y1","FID_ZBG"])
 
     symbolNum = 0 # identifikační číslo znaku v slovníku – spojité od 0 do n
+
+
     for row in seaCur:
         # definování sítě pro jednotlivé znaky !!! KLÍČOVÉ PRO ZADÁNÍ PARAMETRŮ PŘI UPRAVÁCH ALGORITMU !!!
         net = netMake1(int(int(row[3]) / distance), distance)
@@ -318,6 +320,22 @@ def clusterSolve(inputFeature,cluster,distance,outputFeature):
         if detectLoc[d] == 0:
             dict[d]["geom"] = [geometries[d]]
             dict[d]["weight"] = [0.0]
+
+    # definování rozsahu znaků (včetně možných posunů) pro tvorbu rastru
+    clustBuffer = arcpy.SelectLayerByAttribute_management(inputBuffer, "NEW_SELECTION", "CLUSTER = " + str(cluster))
+    arcpy.analysis.Buffer(clust, "temp_clustBuffer", "SHIFT")
+    arcpy.env.extent = arcpy.Describe("temp_clustBuffer").extent
+    print(arcpy.Describe("temp_clustBuffer").extent)
+
+    arcpy.management.CreateMosaicDataset(arcpy.env.workspace, "rastry", sr)
+    for symb in dict:
+        for symbGeomNum in range(len(dict[symb]["geom"])):
+            arcpy.management.CopyFeatures(dict[symb]["geom"][symbGeomNum], "temp_smbGeom")
+            rasterName = "r"+str(symb)+str(symbGeomNum)
+            arcpy.conversion.PolygonToRaster("temp_smbGeom", "OBJECTID", "temp_"+rasterName, "MAXIMUM_AREA","#",4)
+            raster = arcpy.sa.Con(arcpy.sa.IsNull("temp_"+rasterName),0, "temp_"+rasterName)
+            raster.save(rasterName)
+            arcpy.Delete_management("temp_"+rasterName)
 
     def configuration(dict):
         """
@@ -410,6 +428,7 @@ mainSR = 5514
 #shapePlace("znacky.json","JTSK_1","T2feature","T2buffer",mainSR,10000)
 #clusterDefinition(mainFeature,mainBuffer)
 
+# vytvoření seznamu všech clusterů
 seaCur_clust = arcpy.da.SearchCursor(mainFeature, ["CLUSTER"])
 clusters = []
 clusterGeometries = []
@@ -418,9 +437,10 @@ for row in seaCur_clust:
     if row[0] not in clusters:
         clusters.append(row[0])
 
+# vytvoření souboru pro výstup
 arcpy.CreateFeatureclass_management(arcpy.env.workspace, mainOutput, "POLYGON", "#", "#", "#", mainSR)
 
-# přidání odpovídajících polí atributové tabulky
+# přidání odpovídajících polí atributové tabulky do výstupu
 arcpy.AddField_management(mainOutput, "X1", "DOUBLE")
 arcpy.AddField_management(mainOutput, "Y1", "DOUBLE")
 arcpy.AddField_management(mainOutput, "CLASS", "TEXT")
@@ -428,9 +448,9 @@ arcpy.AddField_management(mainOutput, "FID_ZBG", "TEXT")
 
 # clustery seřazené podle počtu prvků
 #clusters = [118, 88, 94, 117, 110]
-clusters = [29]
+clusters = [30]
 
 for cluster in clusters:
-    clusterSolve(mainFeature,cluster,5,mainOutput)
+    clusterSolve(mainFeature,mainBuffer, cluster,10,mainOutput,mainSR)
 
 
