@@ -16,13 +16,15 @@ def shapeDefinition(shapeInput,scale,epsg):
     :param shapeInput: definice tvaru znaku v milimetrech jako seznam
     :param scale: meritkove cislo
     :param epsg: definice souradnicoveho systemu
-    :return: seznam souradnic hranic znaku v bode 0
+    :return: shapeOutput = seznam souradnic hranic znaku v bode 0
     """
     shapeOutput = []
+    # převod pro metrické souřadnicové systémy
     if epsg in [32633,5514]:
         for point in shapeInput:
             coord = []
             for num in point:
+                # přepočítání dle zadaného měřítka do metrů
                  coord.append(num*(scale/1000))
             shapeOutput.append(coord)
     else:
@@ -35,11 +37,12 @@ def detectConflicts(clusterGeom):
     Určí, zda mezi vstupními geometriemi dochází k průniku.
 
     :param clusterGeom: seznam acrpy geometrií, mezi kterými je třeba určit konflikt
-    :return: Počet konfliktů ke kterým mezi geometriemi dochází
+    :return: confNum = Počet konfliktů ke kterým mezi geometriemi dochází, confLoc = seznam definující umístění konfliktů
     """
     confNum = 0 # výsledná číselná hodnota
-    confLoc = []
+    confLoc = [] # seznam s přehledem konfliktů vzhledem ke znakům ve shluku
 
+    # nastavení hodnot výstupního seznamu s přehledem konfliktů na 0
     for i in range(len(clusterGeom)):
         confLoc.append(0)
 
@@ -48,6 +51,7 @@ def detectConflicts(clusterGeom):
     for g1 in range(len(clusterGeom)):
         for g2 in range(len(clusterGeom)):
             if g1 != g2 and g1 < g2:
+                # určení konfliktu arcpy geometrii, FALSE, pokud existuje konflikt
                 conf = clusterGeom[g1].disjoint(clusterGeom[g2])
                 if not conf:
                     confNum += 1
@@ -55,7 +59,7 @@ def detectConflicts(clusterGeom):
                     confLoc[g2] += 1
 
                 #print(str(g1) + " x " + str(g2) + " = " + str(conf))
-    print("confLoc = " + str(confLoc))
+    print("Počty konfliktů vzhledem k znakům ve shluku: " + str(confLoc))
     return confNum, confLoc
 
 def netMake1(layersNumber, distance):
@@ -64,11 +68,12 @@ def netMake1(layersNumber, distance):
 
     :param layersNumber: počet vrstev v pravidelné síti (1 vrstva = síť 3x3, 2 vrstvy = síť 5x5)
     :param distance: vzdálenost mezi jednotlivými body
-    :return:
+    :return: net = slovník jednotlivých pozic v síti, kde hodnotou je umístění jeho váha
     """
-    net = {}
+    net = {} # seznam pozic v síti
     size = layersNumber * 2 + 1
-    num = 0
+    num = 0 # aktuální id místa v síti
+
     # procházení bodů v síti
     for i in range(-layersNumber,layersNumber+1):
         y = i*distance
@@ -76,6 +81,7 @@ def netMake1(layersNumber, distance):
             x = j*distance
             # váha pozice pro její hodnocení jako přímá vzdálenost !!! KLÍČOVÉ PŘI UPRAVÁCH ALGORITMU !!!
             weight = math.sqrt(x**2+y**2)
+            # vytvoření pozice v síti "xy" = pozice vzhledem k původnímu umístění, "weight" = váha pozice
             net[num] = {"xy":[x,y],"weight":weight}
             num += 1
     return net
@@ -95,7 +101,7 @@ def shapePlace(symbolsJSON, inputDataset, outputFeature, outputBuffer, epsg, sca
     :param outputBuffer: cesta k výslednému souboru s obalovými zónami podle maximálního povoleného posunu znaku
     :param epsg: souradnicovy system zadany EPSG kodem
     :param scale: meritkove cislo, pro ktere maji byt vypocitany velikosti polygonu
-    :return:
+    :return: xxx vytváří soubor s polygony znaků a jejich buffer
     """
     print("DEFINUJI ZNAKY JAKO POLGONY NA ZADANÝCH SOUŘADNICÍCH")
 
@@ -180,7 +186,7 @@ def clusterDefinition(inputFeature,inputBuffer):
 
     :param inputFeature: umístění souboru se znaky
     :param inputBuffer: umístění souboru s obalovými zónami
-    :return:
+    :return: xxx přepisuje atribut CLUSTER v atributové tabulce feature class
     """
     print("\nDEFINUJI SHLUKY ZNAKŮ")
     seconds1 = time.time()
@@ -247,36 +253,58 @@ def clusterDefinition(inputFeature,inputBuffer):
 
 def rasterComparsion(conf, dict):
     """
+    Převede polygony znaků v konfiguraci na rastry a pomocí raster calculater je sečte, aby se určila velikost překryvů.
 
-    :param conf:
-    :return:
+    :param conf: aktuální konfigurace znaků
+    :param dict: slovník s přehledem všech znaků a jejich geometrií
+    :return: tableSum = součet všech hodnot větších než 1 ve výsledném rastru
     """
 
-    # volba objektu ve slovníku
-    dictNum = 0
+    dictNum = 0  # volba objektu ve slovníku
 
-    rasterNames = []
-    expression = ""
+    rasterNames = [] # seznam pojmenování rastrů pro jednotlivé znaky podle ID znaku ve slovníku (dict) a umístění konkrétní geometrie v seznamu, který slovník obsahuje
+    expression = "" # výraz pro raster calculater
 
     for cg in conf:
-        rasterName = "r"+str(dictNum)+str(cg)
+        rasterName = "r"+str(dictNum)+str(cg) # jmeno konkrétního rastru
         if expression != "":
             expression += "+"
 
+        # vytvoření rastru pro znak, pokud ještě neexistuje
         if not arcpy.Exists(rasterName):
+            # feature class z geometrie, kvůli vstupu do PolygonToRaster NEJDE NĚJAK VYNECHAT?
             arcpy.management.CopyFeatures(dict[dictNum]["geom"][cg],"temp_cgGeom")
             arcpy.conversion.PolygonToRaster("temp_cgGeom", "OBJECTID", "temp_" + rasterName, "MAXIMUM_AREA", "#", 4)
+            # převod Null na integer 0
             raster = arcpy.sa.Con(arcpy.sa.IsNull("temp_" + rasterName), 0, "temp_" + rasterName)
-            raster.save(rasterName)
+            raster.save(str(rasterName))
             arcpy.Delete_management("temp_" + rasterName)
             arcpy.Delete_management("temp_smbGeom")
         rasterNames.append(rasterName)
         expression += rasterName
         dictNum += 1
 
+    expression = "int("+expression+")"
+    outRaster = arcpy.sa.RasterCalculator(rasterNames,rasterNames,expression)
 
-    out_rc_multi_raster = arcpy.sa.RasterCalculator(rasterNames,rasterNames,expression)
-    out_rc_multi_raster.save("rr")
+    # pojmenování rastru s výsledným porovnáním (LZE VYNECHAT A PŘEPISOVAT JEDEN)
+    outputName = ""
+    for name in rasterNames:
+        outputName += name
+    outputName2 = outputName+"2"
+    outRaster.save(outputName)
+    outRaster.save(outputName2)
+
+    # získání celkového součtu hodnot větších než 1
+    arcpy.sa.ZonalStatisticsAsTable(outputName, "Value", outputName2, "tab_"+outputName, "NODATA", "SUM")
+    arcpy.Delete_management(outputName2)
+    tableSeaCur = arcpy.da.SearchCursor("tab_"+outputName, ["Value", "COUNT", "SUM"])
+    tableSum = 0
+    for row in tableSeaCur:
+        if row[0] > 1:
+            tableSum += row[2]
+    print("tableSum: "+str(tableSum))
+    return tableSum
 
 def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
     """
@@ -287,9 +315,9 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
     # DALŠÍ PARAMETRY MOHOU BÝT KLÍČOVÉ PŘI UPRAVÁCH ALGORITMU !!!
     :param distance: Rozestupy mezi pozicemi v síti
     :param outputFeature: cesta k souboru, do kterého jsou ukládány polygony znaků v nejlepší konfiguraci
-    :return:
+    :return: xxx vytvoří soubor s posunutými polygonovými znaky
     """
-
+    # začátek měření času průběhu funkce
     seconds1 = time.time()
 
     print("\nŘEŠÍM CLUSTER {}".format(cluster))
@@ -360,21 +388,9 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
     arcpy.env.extent = arcpy.Describe("temp_clustBuffer").extent
     print(arcpy.Describe("temp_clustBuffer").extent)
 
-    # arcpy.management.CreateMosaicDataset(arcpy.env.workspace, "rastry", sr)
-    # for symb in dict:
-    #     for symbGeomNum in range(len(dict[symb]["geom"])):
-    #         arcpy.management.CopyFeatures(dict[symb]["geom"][symbGeomNum], "temp_smbGeom")
-    #         rasterName = "r"+str(symb)+str(symbGeomNum)
-    #         arcpy.conversion.PolygonToRaster("temp_smbGeom", "OBJECTID", "temp_"+rasterName, "MAXIMUM_AREA","#",4)
-    #         raster = arcpy.sa.Con(arcpy.sa.IsNull("temp_"+rasterName),0, "temp_"+rasterName)
-    #         raster.save(rasterName)
-    #         arcpy.Delete_management("temp_"+rasterName)
-
-
-
     def configuration(dict):
         """
-
+        AKTUÁLNĚ ASI ZBYTEČNÁ FUNKCE balící procesy kolem procházení jednotlivých konfigurací
         :param cfg:
         :param dict:
         :return:
@@ -399,6 +415,16 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
 
         # rekurzivní procházení konfigurací vázaných na její určitou pozici
         def next(cfg, i, winnerWeight, winner,dict,solution):
+            """
+
+            :param cfg:
+            :param i:
+            :param winnerWeight:
+            :param winner:
+            :param dict:
+            :param solution:
+            :return:
+            """
             while cfg[i] < len(dict[i]["geom"]) - 1:
                 #print(cfg)
 
@@ -419,12 +445,12 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
                     solution = True
 
                 if detect != 0:
-                    actualWeight += detect*maxWeight
                     # vážení konfliktu podle průniku v rasteru (pouze v případě, že není řešení bez konfliktu)
                     if not solution:
                         print("Tvoří se rastr")
-                        rasterComparsion(cfg, dict)
-
+                        # váha rastru = počet pixelů v překryvu * množstí znaků v překryvu
+                        rasterWeight = rasterComparsion(cfg, dict)
+                    actualWeight += rasterWeight * maxWeight
 
 
                 if actualWeight < winnerWeight:
@@ -457,11 +483,12 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
             winner += cfg
         return winner
 
-    winnerCFG = configuration(dict)
+    winnerCFG = configuration(dict) # nejlepší konfigurace
 
     seconds2 = time.time()
     print("Cluster {}, který obsahuje {} znaků, je vyřešen za {} sekund.".format(cluster,len(dict),(seconds2-seconds1)))
 
+    # vložení vítězných geometrií do výstupu
     insCur = arcpy.da.InsertCursor(outputFeature, ["SHAPE@","X1","Y1","FID_ZBG","CLASS"])
     for pos in range(len(dict)):
         insCur.insertRow((dict[pos]["geom"][winnerCFG[pos]],dict[pos]["x"],dict[pos]["y"],dict[pos]["id"],dict[pos]["class"]))
@@ -493,11 +520,11 @@ arcpy.AddField_management(mainOutput, "Y1", "DOUBLE")
 arcpy.AddField_management(mainOutput, "CLASS", "TEXT")
 arcpy.AddField_management(mainOutput, "FID_ZBG", "TEXT")
 
-# clustery seřazené podle počtu prvků
-#clusters = [118, 88, 94, 117, 110]
-clusters = [30]
+
+#clusters = [118, 88, 94, 117, 110] # clustery seřazené podle počtu prvků pro featureTest3
+clusters = [101]
 
 for cluster in clusters:
-    clusterSolve(mainFeature,mainBuffer, cluster,10,mainOutput,mainSR)
+    clusterSolve(mainFeature,mainBuffer, cluster,5,mainOutput,mainSR)
 
 
