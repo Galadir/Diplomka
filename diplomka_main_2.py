@@ -15,7 +15,7 @@ def shapeDefinition(shapeInput,scale,epsg):
 
     :param shapeInput: definice tvaru znaku v milimetrech jako seznam
     :param scale: meritkove cislo
-    :param epsg: definice souradnicoveho systemu
+    :param epsg: definice souřadnicového systemu
     :return: shapeOutput = seznam souradnic hranic znaku v bode 0
     """
     shapeOutput = []
