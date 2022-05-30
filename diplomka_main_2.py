@@ -417,13 +417,13 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
         def next(cfg, i, winnerWeight, winner,dict,solution):
             """
 
-            :param cfg:
-            :param i:
-            :param winnerWeight:
-            :param winner:
-            :param dict:
-            :param solution:
-            :return:
+            :param cfg: aktuální konfigurace
+            :param i: pozice v konfiguraci
+            :param winnerWeight: aktuální váha nejlepší konfigurace
+            :param winner: aktuálně nejlepší konfigurace
+            :param dict: slovník s geometriemi celého clusteru
+            :param solution: boolean zda existuje řešení bez konfliktu
+            :return: winnerWeight, winner, solution
             """
             while cfg[i] < len(dict[i]["geom"]) - 1:
                 #print(cfg)
