@@ -494,13 +494,17 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
         insCur.insertRow((dict[pos]["geom"][winnerCFG[pos]],dict[pos]["x"],dict[pos]["y"],dict[pos]["id"],dict[pos]["class"]))
     del insCur
 
+# základní parametry pro funkci
 mainFeature = "FeatureTest2"
 mainBuffer = mainFeature + "_Buffer"
 mainOutput = "bestOutput9"
 mainSR = 5514
 
-#shapePlace("znacky.json","JTSK_1","T2feature","T2buffer",mainSR,10000)
-#clusterDefinition(mainFeature,mainBuffer)
+# definování polygonové vrstvy z datasetu
+# shapePlace("znacky.json","JTSK_1","T2feature","T2buffer",mainSR,10000)
+
+# roztřídění polygonů do clusterů
+# clusterDefinition(mainFeature,mainBuffer)
 
 # vytvoření seznamu všech clusterů
 seaCur_clust = arcpy.da.SearchCursor(mainFeature, ["CLUSTER"])
@@ -521,7 +525,7 @@ arcpy.AddField_management(mainOutput, "CLASS", "TEXT")
 arcpy.AddField_management(mainOutput, "FID_ZBG", "TEXT")
 
 
-#clusters = [118, 88, 94, 117, 110] # clustery seřazené podle počtu prvků pro featureTest3
+# clusters = [118, 88, 94, 117, 110] # clustery seřazené podle počtu prvků pro featureTest3
 clusters = [101]
 
 for cluster in clusters:
