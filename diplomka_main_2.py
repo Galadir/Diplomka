@@ -306,7 +306,7 @@ def rasterComparsion(conf, dict):
     print("tableSum: "+str(tableSum))
     return tableSum
 
-def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
+def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr, withoutRaster):
     """
     Vrátí nejlepší řešení konfliktu mezi znaky v jednom shluku podle zadaných parametrů.
 
@@ -315,6 +315,7 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
     # DALŠÍ PARAMETRY MOHOU BÝT KLÍČOVÉ PŘI UPRAVÁCH ALGORITMU !!!
     :param distance: Rozestupy mezi pozicemi v síti
     :param outputFeature: cesta k souboru, do kterého jsou ukládány polygony znaků v nejlepší konfiguraci
+    :param withoutRaster: boolean, pokud je True, nevytváří se rastry k porovnání
     :return: xxx vytvoří soubor s posunutými polygonovými znaky
     """
     # začátek měření času průběhu funkce
@@ -388,102 +389,91 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
     arcpy.env.extent = arcpy.Describe("temp_clustBuffer").extent
     print(arcpy.Describe("temp_clustBuffer").extent)
 
-    def configuration(dict):
+    winner = []
+    winnerWeight = 999999999999999
+    solution = withoutRaster # Existuje konfigurace bez konfliktu?
+
+    # nalezení největší váhy pro vážení v případech, že nelze nalézt konfiguraci bez konfliktu
+    maxWeight = 0
+    for wg in range(len(dict)):
+        maxActual = max(dict[wg]["weight"])
+        if maxActual > maxWeight:
+            maxWeight = maxActual
+
+    cfg = []  # konfigurace pozicí znaků
+
+    # nastavení nul jakožto výchozích pozic v konfiguraci
+    for num in range(len(dict)):
+        cfg.append(0)
+
+    # rekurzivní procházení konfigurací vázaných na její určitou pozici
+    def next(cfg, i, winnerWeight, winner,dict,solution):
         """
-        AKTUÁLNĚ ASI ZBYTEČNÁ FUNKCE balící procesy kolem procházení jednotlivých konfigurací
-        :param cfg:
-        :param dict:
-        :return:
+
+        :param cfg: aktuální konfigurace
+        :param i: pozice v konfiguraci
+        :param winnerWeight: aktuální váha nejlepší konfigurace
+        :param winner: aktuálně nejlepší konfigurace
+        :param dict: slovník s geometriemi celého clusteru
+        :param solution: boolean zda existuje řešení bez konfliktu
+        :return: winnerWeight, winner, solution
         """
-        outputGeometries = []
-        winner = []
-        winnerWeight = 999999999999999
-        solution = False # Existuje konfigurace bez konfliktu?
+        while cfg[i] < len(dict[i]["geom"]) - 1:
+            #print(cfg)
 
-        # nalezení největší váhy pro vážení v případech, že nelze nalézt konfiguraci bez konfliktu
-        maxWeight = 0
-        for wg in range(len(dict)):
-            maxActual = max(dict[wg]["weight"])
-            if maxActual > maxWeight:
-                maxWeight = maxActual
-
-        cfg = []  # konfigurace pozicí znaků
-
-        # nastavení nul jakožto výchozích pozic v konfiguraci
-        for num in range(len(dict)):
-            cfg.append(0)
-
-        # rekurzivní procházení konfigurací vázaných na její určitou pozici
-        def next(cfg, i, winnerWeight, winner,dict,solution):
-            """
-
-            :param cfg: aktuální konfigurace
-            :param i: pozice v konfiguraci
-            :param winnerWeight: aktuální váha nejlepší konfigurace
-            :param winner: aktuálně nejlepší konfigurace
-            :param dict: slovník s geometriemi celého clusteru
-            :param solution: boolean zda existuje řešení bez konfliktu
-            :return: winnerWeight, winner, solution
-            """
-            while cfg[i] < len(dict[i]["geom"]) - 1:
-                #print(cfg)
-
-                # otestování konfliktu
-                clusterGeom =[] # všechny geometrie aktuální konfigurace
-                actualWeight = 0
-                for g in range(len(dict)):
-                    clusterGeom.append(dict[g]["geom"][cfg[g]])
-                    actualWeight += dict[g]["weight"][cfg[g]]
+            # otestování konfliktu
+            clusterGeom =[] # všechny geometrie aktuální konfigurace
+            actualWeight = 0
+            for g in range(len(dict)):
+                clusterGeom.append(dict[g]["geom"][cfg[g]])
+                actualWeight += dict[g]["weight"][cfg[g]]
 
 
-                # tvorba výstupu
-                detect,detectLoc = detectConflicts(clusterGeom)
+            # tvorba výstupu
+            detect,detectLoc = detectConflicts(clusterGeom)
 
-                print("Pro konfiguraci {} nalezeno {} konfliktů.".format(cfg,detect))
+            print("Pro konfiguraci {} nalezeno {} konfliktů.".format(cfg,detect))
 
-                if detect == 0:
-                    solution = True
+            if detect == 0:
+                solution = True
 
-                if detect != 0:
-                    # vážení konfliktu podle průniku v rasteru (pouze v případě, že není řešení bez konfliktu)
-                    if not solution:
-                        print("Tvoří se rastr")
-                        # váha rastru = počet pixelů v překryvu * množstí znaků v překryvu
-                        rasterWeight = rasterComparsion(cfg, dict)
-                    actualWeight += rasterWeight * maxWeight
-
-
-                if actualWeight < winnerWeight:
-                    winner = list(cfg)
-                    winnerWeight = actualWeight
-                    # print("Tato konfigurace je aktuálně nejlepší s váhou: {}".format(winnerWeight))
+            if detect != 0:
+                # vážení konfliktu podle průniku v rasteru (pouze v případě, že není řešení bez konfliktu)
+                if not solution:
+                    print("Tvoří se rastr")
+                    # váha rastru = počet pixelů v překryvu * množstí znaků v překryvu
+                    rasterWeight = rasterComparsion(cfg, dict)
+                actualWeight += rasterWeight * maxWeight
 
 
-                # konec testování a tvorby výstupu
+            if actualWeight < winnerWeight:
+                winner = list(cfg)
+                winnerWeight = actualWeight
+                # print("Tato konfigurace je aktuálně nejlepší s váhou: {}".format(winnerWeight))
 
-                cfg[i] += 1
 
-                j = i
-                while j != 0:
-                    j -= 1
-                    winnerWeight, winner, solution = next(cfg, j, winnerWeight, winner,dict, solution)
+            # konec testování a tvorby výstupu
 
-            cfg[i] = 0
-            return winnerWeight, winner, solution
+            cfg[i] += 1
 
-        # procházení pozic v konfiguraci a volání funkce
+            j = i
+            while j != 0:
+                j -= 1
+                winnerWeight, winner, solution = next(cfg, j, winnerWeight, winner,dict, solution)
 
-        for x in range(len(cfg)):
-            # print("další forcyklus")
-            winnerWeight, winner, solution = next(cfg, x, winnerWeight, winner,dict, solution)
+        cfg[i] = 0
+        return winnerWeight, winner, solution
 
-        if winner == []:
-            print("Při současném nastacení pro shluk neexistuje žádné lepší řešení než výchozí")
-            # arcpy.CopyFeatures_management(geometries, "best164")
-            winner += cfg
-        return winner
+    # procházení pozic v konfiguraci a volání funkce
 
-    winnerCFG = configuration(dict) # nejlepší konfigurace
+    for x in range(len(cfg)):
+        # print("další forcyklus")
+        winnerWeight, winner, solution = next(cfg, x, winnerWeight, winner,dict, solution)
+
+    if winner == []:
+        print("Při současném nastacení pro shluk neexistuje žádné lepší řešení než výchozí")
+        # arcpy.CopyFeatures_management(geometries, "best164")
+        winner += cfg
 
     seconds2 = time.time()
     print("Cluster {}, který obsahuje {} znaků, je vyřešen za {} sekund.".format(cluster,len(dict),(seconds2-seconds1)))
@@ -491,7 +481,7 @@ def clusterSolve(inputFeature, inputBuffer, cluster,distance,outputFeature,sr):
     # vložení vítězných geometrií do výstupu
     insCur = arcpy.da.InsertCursor(outputFeature, ["SHAPE@","X1","Y1","FID_ZBG","CLASS"])
     for pos in range(len(dict)):
-        insCur.insertRow((dict[pos]["geom"][winnerCFG[pos]],dict[pos]["x"],dict[pos]["y"],dict[pos]["id"],dict[pos]["class"]))
+        insCur.insertRow((dict[pos]["geom"][winner[pos]],dict[pos]["x"],dict[pos]["y"],dict[pos]["id"],dict[pos]["class"]))
     del insCur
 
 # základní parametry pro funkci
@@ -526,9 +516,9 @@ arcpy.AddField_management(mainOutput, "FID_ZBG", "TEXT")
 
 
 # clusters = [118, 88, 94, 117, 110] # clustery seřazené podle počtu prvků pro featureTest3
-clusters = [101]
+clusters = [29]
 
 for cluster in clusters:
-    clusterSolve(mainFeature,mainBuffer, cluster,5,mainOutput,mainSR)
+    clusterSolve(mainFeature,mainBuffer, cluster,5,mainOutput,mainSR,False)
 
 
